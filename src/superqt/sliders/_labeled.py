@@ -234,7 +234,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
     EdgeLabelMode = EdgeLabelMode
     _slider_class = QRangeSlider
     _slider: QRangeSlider
-    _frangeChanged = Signal(float, float)
+    _frangeChanged = Signal(int, int)
 
     def __init__(self, *args, **kwargs) -> None:
         parent, orientation = _handle_overloaded_slider_sig(args, kwargs)
@@ -452,6 +452,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
 class QLabeledDoubleRangeSlider(QLabeledRangeSlider):
     _slider_class = QDoubleRangeSlider
     _slider: QDoubleRangeSlider
+    _frangeChanged = Signal(float, float)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

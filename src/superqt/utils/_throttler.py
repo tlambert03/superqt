@@ -194,6 +194,7 @@ if TYPE_CHECKING:
 
     class ThrottledCallable(Generic[P, R], Protocol):
         triggered: "SignalInstance"
+        throttler: GenericSignalThrottler
 
         def cancel(self) -> None:
             ...
@@ -368,6 +369,7 @@ def _make_decorator(
             throttle.throttle()
             return future
 
+        inner.throttler = throttle
         inner.cancel = throttle.cancel
         inner.flush = throttle.flush
         inner.set_timeout = throttle.setTimeout

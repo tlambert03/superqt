@@ -29,9 +29,10 @@ SOFTWARE.
 from __future__ import annotations
 
 from concurrent.futures import Future
+from contextlib import suppress
 from enum import IntFlag, auto
 from functools import wraps
-from typing import TYPE_CHECKING, Callable, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar, overload
 
 from qtpy.QtCore import QObject, Qt, QTimer, Signal
 
@@ -199,11 +200,16 @@ class ThrottledCallable(GenericSignalThrottler, Generic[P, R]):
         emissionPolicy: EmissionPolicy,
         parent: QObject | None = None,
     ) -> None:
+        if parent is None and isinstance(
+            func_self := getattr(func, "__self__", None), QObject
+        ):
+            parent = func_self
         super().__init__(kind, emissionPolicy, parent)
 
         self._future: Future[R] = Future()
-        self.__wrapped__ = func
+        self.__wrapped__, self._is_static = self._extract_callable(func)
 
+        self._name: str | None = None
         self._args: tuple = ()
         self._kwargs: dict = {}
         self.triggered.connect(self._set_future_result)
@@ -213,7 +219,13 @@ class ThrottledCallable(GenericSignalThrottler, Generic[P, R]):
         # instance: https://bugreports.qt.io/browse/PYSIDE-2423
         # so we do it ourselfs and limit the number of positional arguments
         # that we pass to func
-        self._max_args: int | None = get_max_args(func)
+        self._max_args: int | None = get_max_args(self.__wrapped__)
+
+    @staticmethod
+    def _extract_callable(obj: Any) -> tuple[Callable, bool]:
+        if isinstance(obj, staticmethod):
+            return obj.__func__, True
+        return obj, False
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> "Future[R]":  # noqa
         if not self._future.done():
@@ -229,6 +241,37 @@ class ThrottledCallable(GenericSignalThrottler, Generic[P, R]):
     def _set_future_result(self):
         result = self.__wrapped__(*self._args[: self._max_args], **self._kwargs)
         self._future.set_result(result)
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self._name = name
+        # oddly enough, some qt metaclasses appear to be re-assigning __wrapped__
+        # and that can break some static methods.
+        self.__wrapped__, self._is_static = self._extract_callable(self.__wrapped__)
+
+    def __get__(
+        self, instance: object | None, owner: type | None = None
+    ) -> ThrottledCallable[P, R]:
+        if instance is None or not self._name or self._is_static:
+            return self
+
+        parent = self.parent()
+        if parent is None and isinstance(instance, QObject):
+            parent = instance
+
+        bound_caller = ThrottledCallable(
+            func=self.__wrapped__.__get__(instance, owner),
+            kind=self._kind,
+            emissionPolicy=self._emissionPolicy,
+            parent=parent,
+        )
+        bound_caller.setTimeout(self.timeout())
+        bound_caller.setTimerType(self.timerType())
+
+        with suppress(AttributeError):
+            # it's ok if the caching fails here.  and it may in rare cases
+            setattr(instance, self._name, bound_caller)
+
+        return bound_caller  # type: ignore
 
 
 @overload
@@ -354,10 +397,11 @@ def _make_decorator(
     leading: bool,
     timer_type: Qt.TimerType,
     kind: Kind,
+    parent: QObject | None = None,
 ) -> ThrottledCallable[P, R] | Callable[[Callable[P, R]], ThrottledCallable[P, R]]:
     def deco(func: Callable[P, R]) -> ThrottledCallable[P, R]:
         policy = EmissionPolicy.Leading if leading else EmissionPolicy.Trailing
-        obj = ThrottledCallable(func, kind, policy)
+        obj = ThrottledCallable(func, kind, policy, parent=parent)
         obj.setTimerType(timer_type)
         obj.setTimeout(timeout)
         return wraps(func)(obj)

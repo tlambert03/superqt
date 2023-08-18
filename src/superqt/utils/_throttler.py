@@ -280,6 +280,7 @@ def qthrottled(
     timeout: int = 100,
     leading: bool = True,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> ThrottledCallable[P, R]:
     ...
 
@@ -290,6 +291,7 @@ def qthrottled(
     timeout: int = 100,
     leading: bool = True,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> Callable[[Callable[P, R]], ThrottledCallable[P, R]]:
     ...
 
@@ -299,6 +301,7 @@ def qthrottled(
     timeout: int = 100,
     leading: bool = True,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> ThrottledCallable[P, R] | Callable[[Callable[P, R]], ThrottledCallable[P, R]]:
     """Creates a throttled function that invokes func at most once per timeout.
 
@@ -327,8 +330,11 @@ def qthrottled(
             - `Qt.CoarseTimer`: Coarse timers try to keep accuracy within 5% of the
               desired interval
             - `Qt.VeryCoarseTimer`: Very coarse timers only keep full second accuracy
+    parent: QObject | None
+        Parent object for timer. If using qthrottled as function it may be usefull
+        for cleaning data
     """
-    return _make_decorator(func, timeout, leading, timer_type, Kind.Throttler)
+    return _make_decorator(func, timeout, leading, timer_type, Kind.Throttler, parent)
 
 
 @overload
@@ -337,6 +343,7 @@ def qdebounced(
     timeout: int = 100,
     leading: bool = False,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> ThrottledCallable[P, R]:
     ...
 
@@ -347,6 +354,7 @@ def qdebounced(
     timeout: int = 100,
     leading: bool = False,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> Callable[[Callable[P, R]], ThrottledCallable[P, R]]:
     ...
 
@@ -356,6 +364,7 @@ def qdebounced(
     timeout: int = 100,
     leading: bool = False,
     timer_type: Qt.TimerType = Qt.TimerType.PreciseTimer,
+    parent: QObject | None = None,
 ) -> ThrottledCallable[P, R] | Callable[[Callable[P, R]], ThrottledCallable[P, R]]:
     """Creates a debounced function that delays invoking `func`.
 
@@ -387,8 +396,11 @@ def qdebounced(
             - `Qt.CoarseTimer`: Coarse timers try to keep accuracy within 5% of the
               desired interval
             - `Qt.VeryCoarseTimer`: Very coarse timers only keep full second accuracy
+    parent: QObject | None
+        Parent object for timer. If using qthrottled as function it may be usefull
+        for cleaning data
     """
-    return _make_decorator(func, timeout, leading, timer_type, Kind.Debouncer)
+    return _make_decorator(func, timeout, leading, timer_type, Kind.Debouncer, parent)
 
 
 def _make_decorator(

@@ -1,14 +1,36 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from contextlib import suppress
+from typing import TYPE_CHECKING, ClassVar, Protocol, cast
 
-from qtpy.QtGui import QIcon
+from qtpy.QtCore import QEvent, QObject
+from qtpy.QtGui import QGuiApplication, QIcon, QPalette
 
 if TYPE_CHECKING:
     from typing import Literal
 
     Flip = Literal["horizontal", "vertical", "horizontal,vertical"]
     Rotation = Literal["90", "180", "270", 90, 180, 270, "-90", 1, 2, 3]
+
+    class SupportsIcon(Protocol):
+        def icon(self) -> QIcon:
+            """Return the current icon."""
+
+        def setIcon(self, icon: QIcon) -> None:
+            """Set the icon."""
+
+        def installEventFilter(self, a0: QObject | None) -> None:
+            """Install an event filter on this object."""
+
+    # these are Qt classes that support icons
+    # QtWidgets.QListWidgetItem
+    # QtWidgets.QTableWidgetItem
+    # QtWidgets.QMenu
+    # QtWidgets.QSystemTrayIcon
+    # QtWidgets.QAbractButton
+    # QtGui.QAction
+    # QtGui.QWindow
+    # QtGui.QStandardItem
 
 
 class QIconifyIcon(QIcon):
@@ -55,6 +77,8 @@ class QIconifyIcon(QIcon):
     >>> btn.setIcon(icon)
     """
 
+    _CACHE_KEYS: ClassVar[dict[int, tuple]] = {}
+
     def __init__(
         self,
         *key: str,
@@ -71,13 +95,93 @@ class QIconifyIcon(QIcon):
                 "Please install it with `pip install pyconify` or use the "
                 "`pip install superqt[iconify]` extra."
             ) from e
-        if len(key) == 1:
-            self._name = key[0]
-        else:
-            self._name = ":".join(key)
+        self._name = key[0] if len(key) == 1 else ":".join(key)
         self.path = svg_path(*key, color=color, flip=flip, rotate=rotate, dir=dir)
         super().__init__(str(self.path))
+        self._args = (self._name, color, flip, rotate)
+        QIconifyIcon._CACHE_KEYS[self.cacheKey()] = self._args
 
     def name(self) -> str:
         """Return the iconify `prefix:icon` represented by this QIcon."""
         return self._name
+
+    @classmethod
+    def fromQIcon(
+        cls,
+        icon: QIcon,
+        color: str | None = None,
+        flip: Flip | None = None,
+        rotate: Rotation | None = None,
+    ) -> QIconifyIcon:
+        """Return a QIconifyIcon instance from a cache key."""
+        if (args := cls._CACHE_KEYS.get(icon.cacheKey())) is None:
+            raise ValueError(f"Icon {icon} was not created as a QIconifyIcon.")
+        name_, color_, flip_, rotate_ = args
+        color = color or color_
+        flip = flip or flip_
+        rotate = rotate or rotate_
+        return cls(name_, color=color, flip=flip, rotate=rotate)
+
+    @staticmethod
+    def installPaletteEventFilter(
+        obj: SupportsIcon,
+        role: QPalette.ColorRole = QPalette.ColorRole.ButtonText,
+    ) -> IconifyPaletteEventFilter:
+        """Install event filter on `obj` that keeps icon color in sync with palette.
+
+        Parameters
+        ----------
+        obj : QObject
+            The object to install the event filter on.  Must be a QObject with `icon`
+            and `setIcon` methods.  And the icon must be a QIconifyIcon. If
+            `obj.setIcon()` was not previously called with a QIconifyIcon, this filter
+            will do nothing.
+        role : QPalette.ColorRole, optional
+            The palette color role to use for recoloring, by default
+            `QPalette.ColorRole.ButtonText`
+        parent : QObject, optional
+            A parent object for the filter, by default None.
+
+        Returns
+        -------
+        filter : _IconifyColorChanger
+            The installed event filter. May be uninstalled with
+            `obj.removeEventFilter(filter)`.
+        """
+        if (
+            not isinstance(obj, QObject)
+            or not hasattr(obj, "icon")
+            or not hasattr(obj, "setIcon")
+        ):
+            raise TypeError(
+                "Cannot install IconColorChanger event filter on object of type "
+                f"{type(obj)}. It must be a QObject with `icon` and `setIcon` methods."
+            )
+        obj_filter = IconifyPaletteEventFilter(role, obj)
+        obj.installEventFilter(obj_filter)
+        return obj_filter
+
+
+class IconifyPaletteEventFilter(QObject):
+    def __init__(
+        self,
+        role: QPalette.ColorRole = QPalette.ColorRole.ButtonText,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.role = role
+
+    def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
+        if not event or not obj:
+            return False
+        if event.type() == QEvent.Type.PaletteChange:
+            obj_ = cast("SupportsIcon", obj)
+            if hasattr(obj_, "palette"):
+                palette = cast("QPalette", obj_.palette())
+            else:
+                palette = QGuiApplication.palette()
+            new_color = palette.color(self.role).name()
+            with suppress(ValueError, AttributeError):
+                new_icon = QIconifyIcon.fromQIcon(obj_.icon(), color=new_color)
+                obj_.setIcon(new_icon)
+        return False

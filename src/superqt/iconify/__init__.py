@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING, ClassVar, Protocol, cast
+from typing import TYPE_CHECKING, Callable, ClassVar, Protocol, cast
 
 from qtpy.QtCore import QEvent, QObject
-from qtpy.QtGui import QGuiApplication, QIcon, QPalette
+from qtpy.QtGui import QColor, QGuiApplication, QIcon, QPalette
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -172,16 +172,29 @@ class IconifyPaletteEventFilter(QObject):
         self.role = role
 
     def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
-        if not event or not obj:
-            return False
-        if event.type() == QEvent.Type.PaletteChange:
-            obj_ = cast("SupportsIcon", obj)
-            if hasattr(obj_, "palette"):
-                palette = cast("QPalette", obj_.palette())
-            else:
-                palette = QGuiApplication.palette()
-            new_color = palette.color(self.role).name()
-            with suppress(ValueError, AttributeError):
-                new_icon = QIconifyIcon.fromQIcon(obj_.icon(), color=new_color)
-                obj_.setIcon(new_icon)
+        """Change icon color when palette changes."""
+        if (
+            event is not None
+            and event.type() == QEvent.Type.PaletteChange
+            and obj is not None
+            and hasattr(obj, "setIcon")
+        ):
+            new_color = self.getIconColor(obj)
+            if new_icon := self.getNewIcon(obj, new_color):
+                obj.setIcon(new_icon)
         return False
+
+    def getIconColor(self, obj: QObject) -> QColor:
+        """Return a suitable icon color for `obj`."""
+        if hasattr(obj, "palette"):
+            return cast("QPalette", obj.palette()).color(self.role)
+        return QGuiApplication.palette().color(self.role)
+
+    def getNewIcon(self, obj: QObject, color: QColor) -> QIcon | None:
+        """Return an instance of QIcon suitable for obj using `color`."""
+        if hasattr(obj, "icon"):
+            icon = cast("QIcon", obj.icon())
+            if isinstance(icon, QIconifyIcon):
+                with suppress(ValueError):
+                    return QIconifyIcon.fromQIcon(icon, color=color.name())
+        return None

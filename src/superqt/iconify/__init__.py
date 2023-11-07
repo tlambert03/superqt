@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING, Callable, ClassVar, Protocol, cast
+from typing import TYPE_CHECKING, ClassVar, Protocol, cast
 
 from qtpy.QtCore import QEvent, QObject
 from qtpy.QtGui import QColor, QGuiApplication, QIcon, QPalette
@@ -177,15 +177,19 @@ class IconifyPaletteEventFilter(QObject):
             event is not None
             and event.type() == QEvent.Type.PaletteChange
             and obj is not None
-            and hasattr(obj, "setIcon")
         ):
+            self.updateIcon(obj)
+        return False
+
+    def updateIcon(self, obj: QObject) -> None:
+        """Update the icon on `obj` to match the current palette."""
+        if hasattr(obj, "setIcon"):
             new_color = self.getIconColor(obj)
             if new_icon := self.getNewIcon(obj, new_color):
                 obj.setIcon(new_icon)
-        return False
 
     def getIconColor(self, obj: QObject) -> QColor:
-        """Return a suitable icon color for `obj`."""
+        """Return a suitable icon color to be placed on `obj`."""
         if hasattr(obj, "palette"):
             return cast("QPalette", obj.palette()).color(self.role)
         return QGuiApplication.palette().color(self.role)
@@ -198,3 +202,19 @@ class IconifyPaletteEventFilter(QObject):
                 with suppress(ValueError):
                     return QIconifyIcon.fromQIcon(icon, color=color.name())
         return None
+
+
+class PaletteEventFilter(QObject):
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """Change icon color when palette changes."""
+        if event.type() == QEvent.Type.PaletteChange:
+            pal = (
+                obj.palette() if hasattr(obj, "palette") else QGuiApplication.palette()
+            )
+            new_color = pal.color(QPalette.ColorRole.ButtonText)
+            new_icon = self.getNewIcon(obj, new_color)
+            obj.setIcon(new_icon)
+        return False
+
+    def getNewIcon(self, obj: QObject, color: QColor) -> QIcon | None:
+        """Return an instance of QIcon suitable for obj using `color`."""

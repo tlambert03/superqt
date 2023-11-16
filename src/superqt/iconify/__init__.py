@@ -17,6 +17,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     svg_path = None
 
+# CACHEKEYS
+# cacheKeys will change whenever the following methods are called:
+# - QIcon::addFile()
+# - QIcon::addPixmap()
+# - QIcon::setIsMask()
 
 class PaletteIconEventFilter(QObject):
     _ICON_CACHE_TO_CONSTRUTOR: ClassVar[dict[int, NewIconCallable]] = {}

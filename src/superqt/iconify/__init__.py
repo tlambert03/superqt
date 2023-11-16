@@ -1,59 +1,22 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, ClassVar
+from typing import TYPE_CHECKING, Any, Callable, cast
 
-from qtpy.QtCore import QEvent, QObject, QSize
-from qtpy.QtGui import QColor, QGuiApplication, QIcon, QPalette
+from qtpy.QtCore import QSize
+from qtpy.QtGui import QColor, QIcon
 
 if TYPE_CHECKING:
     from typing import Literal
 
     Flip = Literal["horizontal", "vertical", "horizontal,vertical"]
     Rotation = Literal["90", "180", "270", 90, 180, 270, "-90", 1, 2, 3]
-    NewIconCallable = Callable[[QColor], QIcon | None]
+    NewIconCallable = Callable[[QColor], QIcon]
+
 
 try:
     from pyconify import svg_path
 except ModuleNotFoundError:  # pragma: no cover
     svg_path = None
-
-# CACHEKEYS
-# cacheKeys will change whenever the following methods are called:
-# - QIcon::addFile()
-# - QIcon::addPixmap()
-# - QIcon::setIsMask()
-
-class PaletteIconEventFilter(QObject):
-    _ICON_CACHE_TO_CONSTRUTOR: ClassVar[dict[int, NewIconCallable]] = {}
-
-    def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
-        """Update icon color when palette changes."""
-        if event and event.type() == QEvent.Type.PaletteChange and obj:
-            self.updateIconColor(obj)
-        return False
-
-    def updateIconColor(self, obj: QObject) -> None:
-        """Set icon color on `obj` to match palette."""
-        if hasattr(obj, "icon") and hasattr(obj, "setIcon"):
-            palette = (
-                obj.palette() if hasattr(obj, "palette") else QGuiApplication.palette()
-            )
-            if make_icon := self.get_constructor(obj.icon()):
-                new_color = palette.color(QPalette.ColorRole.ButtonText)
-                if new_icon := make_icon(new_color):
-                    obj.setIcon(new_icon)
-
-    @classmethod
-    def set_constructor(cls, icon: QIcon, constructor: NewIconCallable) -> None:
-        """Set `constructor` as the constructor for `icon`."""
-        print("set", icon.cacheKey())
-        cls._ICON_CACHE_TO_CONSTRUTOR[icon.cacheKey()] = constructor
-
-    @classmethod
-    def get_constructor(cls, icon: QIcon) -> NewIconCallable | None:
-        """Get the constructor for `icon`."""
-        print("get", icon.cacheKey())
-        return cls._ICON_CACHE_TO_CONSTRUTOR.get(icon.cacheKey())
 
 
 class QIconifyIcon(QIcon):
@@ -130,6 +93,7 @@ class QIconifyIcon(QIcon):
         dir: str | None = None,
         mode: QIcon.Mode = QIcon.Mode.Normal,
         state: QIcon.State = QIcon.State.Off,
+        _color: str | None = None,
     ) -> None:
         """Add an icon to this QIcon.
 
@@ -161,36 +125,29 @@ class QIconifyIcon(QIcon):
         state : QIcon.State, optional
             State specified for the icon, passed to `QIcon.addFile`.
         """
-        previous_constructor = PaletteIconEventFilter.get_constructor(self)
-        kwargs = {"color": color, "flip": flip, "rotate": rotate, "dir": dir}
-        self._add_file(key, mode, state, **kwargs)
-        self._store_key(key, previous_constructor, **kwargs)
-
-    def _add_file(
-        self,
-        key: tuple[str, ...],
-        mode: QIcon.Mode = QIcon.Mode.Normal,
-        state: QIcon.State = QIcon.State.Off,
-        **kwargs: Any,
-    ) -> None:
-        self.addFile(str(svg_path(*key, **kwargs)), QSize(), mode, state)
+        previous_key = self.cacheKey()
+        kwargs = {"flip": flip, "rotate": rotate, "dir": dir}
+        path = str(svg_path(*key, color=_color or color, **kwargs))
+        kwargs.update({"mode": mode, "state": state, "color": color})
+        self.addFile(path, QSize(), mode, state)
+        self._store_key(key, previous_key, **kwargs)
 
     def _store_key(
         self,
         key: tuple[str, ...],
-        previous_constructor: NewIconCallable | None = None,
+        previous_key: int | None = None,
         **kwargs: Any,
     ) -> None:
-        def make_new(qcolor: QColor) -> QIcon | None:
-            print("make new for", self.cacheKey(), qcolor.name())
-            icon = (
-                QIconifyIcon()
-                if previous_constructor is None
-                else previous_constructor(qcolor)
-            )
-            if addKey := getattr(icon, "addKey", None):
-                kwargs.setdefault("color", qcolor.name())
-                addKey(*key, **kwargs)
+        from superqt.utils import PaletteIconEventFilter
+
+        def make_new(qcolor: QColor) -> QIcon:
+            """Doc."""
+            if constructor := PaletteIconEventFilter.get_constructor(previous_key):
+                icon = cast("QIconifyIcon", constructor(qcolor))
+            else:
+                icon = QIconifyIcon()
+            _color = kwargs.get("color") or qcolor.name()
+            icon.addKey(*key, _color=_color, **kwargs)
             return icon
 
-        PaletteIconEventFilter.set_constructor(self, make_new)
+        PaletteIconEventFilter.set_constructor(self.cacheKey(), make_new)

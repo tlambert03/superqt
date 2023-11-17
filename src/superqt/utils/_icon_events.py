@@ -20,7 +20,7 @@ if TYPE_CHECKING:
             """Set icon for this object."""
 
 
-class PaletteIconEventFilter(QObject):
+class IconPaletteEventFilter(QObject):
     """Event filter that updates icon color when palette changes.
 
     This Filter works by listening for a `QEvent.Type.PaletteChange` event on an

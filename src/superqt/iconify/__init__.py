@@ -138,11 +138,11 @@ class QIconifyIcon(QIcon):
         previous_key: int | None = None,
         **kwargs: Any,
     ) -> None:
-        from superqt.utils import PaletteIconEventFilter
+        from superqt.utils import IconPaletteEventFilter
 
         def make_new(qcolor: QColor) -> QIcon:
             """Doc."""
-            if constructor := PaletteIconEventFilter.get_constructor(previous_key):
+            if constructor := IconPaletteEventFilter.get_constructor(previous_key):
                 icon = cast("QIconifyIcon", constructor(qcolor))
             else:
                 icon = QIconifyIcon()
@@ -150,4 +150,4 @@ class QIconifyIcon(QIcon):
             icon.addKey(*key, _color=_color, **kwargs)
             return icon
 
-        PaletteIconEventFilter.set_constructor(self.cacheKey(), make_new)
+        IconPaletteEventFilter.set_constructor(self.cacheKey(), make_new)

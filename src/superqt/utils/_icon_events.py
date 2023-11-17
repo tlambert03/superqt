@@ -6,10 +6,6 @@ from qtpy.QtCore import QEvent, QObject
 from qtpy.QtGui import QColor, QGuiApplication, QIcon, QPalette
 
 if TYPE_CHECKING:
-    from typing import Literal
-
-    Flip = Literal["horizontal", "vertical", "horizontal,vertical"]
-    Rotation = Literal["90", "180", "270", 90, 180, 270, "-90", 1, 2, 3]
     NewIconCallable = Callable[[QColor], QIcon]
 
     class SupportsIcon(Protocol):
@@ -34,8 +30,22 @@ class IconPaletteEventFilter(QObject):
     only when the data underlying a `QIcon` changes by calling `addFile()`,
     `addPixmap()`, or `setIsMask()`.
 
-    This class allows users to register a function (`Callable[[QColor], QIcon]`)
+    This class allows users to register a function () that
+    can be used to create a new QIcon with the same cacheKey but different color.
+    This allows us to update the icon color when the palette changes.  To register
+    a constructor, use `IconPaletteEventFilter.set_constructor(my_icon, my_callback)`.
 
+    where `my_icon` is a QIcon or an int (the cacheKey) and `my_callback` is a function
+    with signature `Callable[[QColor], QIcon]` that returns a new QIcon with the same
+    data as `my_icon` but with the color set to the color passed to the callback.  It
+    may return None if it cannot or wishes not to create a new icon for the given color.
+
+    Parameters
+    ----------
+    color_role : QPalette.ColorRole, optional
+        Color role to use for icon color. Default is QPalette.ColorRole.ButtonText.
+    parent : QObject, optional
+        Parent QObject.
     """
 
     _ICON_CACHE_TO_CONSTRUCTOR: ClassVar[dict[int, NewIconCallable]] = {}
@@ -50,9 +60,13 @@ class IconPaletteEventFilter(QObject):
 
     def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
         """Update icon color when palette changes."""
-        if event and event.type() == QEvent.Type.PaletteChange and obj:
-            if hasattr(obj, "icon") and hasattr(obj, "setIcon"):
-                self.updateIconColor(obj)
+        if (
+            event
+            and event.type() == QEvent.Type.PaletteChange
+            and hasattr(obj, "icon")
+            and hasattr(obj, "setIcon")
+        ):
+            self.updateIconColor(cast("SupportsIcon", obj))
         return False
 
     def updateIconColor(self, obj: SupportsIcon) -> None:
@@ -63,13 +77,13 @@ class IconPaletteEventFilter(QObject):
             palette = cast("QPalette", obj.palette())
         else:
             palette = QGuiApplication.palette()
-        if new_icon := self.getNewIcon(icon, palette.color(self.color_role)):
+        if new_icon := self.getNewIcon(icon, palette):
             obj.setIcon(new_icon)
 
-    def getNewIcon(self, icon: QIcon, new_color: QColor) -> QIcon | None:
-        """Return a new icon with `new_color` if possible, otherwise return None."""
+    def getNewIcon(self, icon: QIcon, palette: QPalette) -> QIcon | None:
+        """Return a new icon for `paltte` if possible, otherwise return None."""
         if make_icon := self.get_constructor(icon):
-            return make_icon(new_color)
+            return make_icon(palette.color(self.color_role))
         return None
 
     @classmethod

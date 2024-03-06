@@ -76,7 +76,9 @@ class QMessageHandler:
     def __exit__(self, *args):
         self.uninstall()
 
-    def __call__(self, msgtype: QtMsgType, context: QMessageLogContext, message: str):
+    def __call__(
+        self, msgtype: QtMsgType, context: QMessageLogContext, message: str
+    ) -> None:
         level = self._qt2loggertype[msgtype]
 
         # PyQt seems to throw an error if these are simply empty

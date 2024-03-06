@@ -23,14 +23,14 @@ class Animation(ABC):
             self.parent_widget.update()
 
     @abstractmethod
-    def animate(self, painter: QPainter):
+    def animate(self, painter: QPainter) -> None:
         """Setup and start the timer for the animation."""
 
 
 class spin(Animation):
     """Animation that smoothly spins an icon."""
 
-    def animate(self, painter: QPainter):
+    def animate(self, painter: QPainter) -> None:
         if not self.timer.isActive():
             self.timer.start()
 

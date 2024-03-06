@@ -229,7 +229,7 @@ rgba_pattern = re.compile(
 )
 
 
-def parse_color(color: str, default_attr) -> QColor | QGradient:
+def parse_color(color: str, default_attr: str) -> QColor | QGradient:
     qc = QColor(color)
     if qc.isValid():
         return qc
@@ -259,7 +259,7 @@ def parse_color(color: str, default_attr) -> QColor | QGradient:
     return QColor(getattr(SYSTEM_STYLE, default_attr))
 
 
-def update_styles_from_stylesheet(obj: _GenericRangeSlider):
+def update_styles_from_stylesheet(obj: _GenericRangeSlider) -> None:
     qss: str = obj.styleSheet()
 
     parent = obj.parent()

@@ -231,13 +231,14 @@ class WorkerBase(QRunnable, Generic[_R]):
         repr(self)
 
         self._worker_set.add(self)
-        if QThread.currentThread().loopLevel():
-            # if we're in a thread with an eventloop, queue the worker to start
-            start_ = partial(QThreadPool.globalInstance().start, self)
-            QTimer.singleShot(1, start_)
-        else:
-            # otherwise start it immediately
-            QThreadPool.globalInstance().start(self)
+        if global_instance := QThreadPool.globalInstance():
+            if (thread := QThread.currentThread()) and thread.loopLevel():
+                # if we're in a thread with an eventloop, queue the worker to start
+                start_ = partial(global_instance.start, self)
+                QTimer.singleShot(1, start_)
+            else:
+                # otherwise start it immediately
+                global_instance.start(self)
 
     @classmethod
     def _set_discard(cls, obj: WorkerBase) -> None:
@@ -438,7 +439,7 @@ class GeneratorWorker(WorkerBase, Generic[_Y, _S, _R]):
                 return exc
         return None
 
-    def send(self, value: _S):
+    def send(self, value: _S) -> None:
         """Send a value into the function (if a generator was used)."""
         self._incoming_value = value
 
@@ -480,35 +481,35 @@ class GeneratorWorker(WorkerBase, Generic[_Y, _S, _R]):
 @overload
 def create_worker(
     func: Callable[_P, Generator[_Y, _S, _R]],
-    *args,
+    *args: Any,
     _start_thread: bool | None = None,
     _connect: dict[str, Callable | Sequence[Callable]] | None = None,
     _worker_class: type[GeneratorWorker] | type[FunctionWorker] | None = None,
     _ignore_errors: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> GeneratorWorker[_Y, _S, _R]: ...
 
 
 @overload
 def create_worker(
     func: Callable[_P, _R],
-    *args,
+    *args: Any,
     _start_thread: bool | None = None,
     _connect: dict[str, Callable | Sequence[Callable]] | None = None,
     _worker_class: type[GeneratorWorker] | type[FunctionWorker] | None = None,
     _ignore_errors: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> FunctionWorker[_R]: ...
 
 
 def create_worker(
     func: Callable,
-    *args,
+    *args: Any,
     _start_thread: bool | None = None,
     _connect: dict[str, Callable | Sequence[Callable]] | None = None,
     _worker_class: type[GeneratorWorker] | type[FunctionWorker] | None = None,
     _ignore_errors: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> FunctionWorker | GeneratorWorker:
     """Convenience function to start a function in another thread.
 
@@ -641,12 +642,12 @@ def thread_worker(
 
 
 def thread_worker(
-    function: Callable | None = None,
+    function: Callable[_P, _R] | None = None,
     start_thread: bool | None = None,
     connect: dict[str, Callable | Sequence[Callable]] | None = None,
     worker_class: type[WorkerBase] | None = None,
     ignore_errors: bool = False,
-):
+) -> Callable | Callable[_P, FunctionWorker | GeneratorWorker]:
     """Decorator that runs a function in a separate thread when called.
 
     When called, the decorated function returns a
@@ -734,9 +735,11 @@ def thread_worker(
     ```
     """
 
-    def _inner(func):
+    def _inner(func: Callable) -> Callable[_P, FunctionWorker | GeneratorWorker]:
         @wraps(func)
-        def worker_function(*args, **kwargs):
+        def worker_function(
+            *args: _P.args, **kwargs: _P.kwargs
+        ) -> FunctionWorker | GeneratorWorker:
             # decorator kwargs can be overridden at call time by using the
             # underscore-prefixed version of the kwarg.
             kwargs["_start_thread"] = kwargs.get("_start_thread", start_thread)
@@ -780,11 +783,11 @@ if TYPE_CHECKING:
 
 def new_worker_qthread(
     Worker: type[WorkerProtocol],
-    *args,
+    *args: Any,
     _start_thread: bool = False,
     _connect: dict[str, Callable] | None = None,
-    **kwargs,
-):
+    **kwargs: Any,
+) -> tuple[WorkerProtocol, QThread]:
     """Convenience function to start a worker in a `QThread`.
 
     thread, not as the actual code or object that runs in that

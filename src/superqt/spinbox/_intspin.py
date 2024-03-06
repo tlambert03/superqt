@@ -1,7 +1,7 @@
 import math
 from enum import Enum
 
-from qtpy.QtCore import QSize, Qt, Signal
+from qtpy.QtCore import QObject, QSize, Qt, Signal
 from qtpy.QtGui import QFontMetrics, QValidator
 from qtpy.QtWidgets import QAbstractSpinBox, QStyle, QStyleOptionSpinBox
 
@@ -13,10 +13,14 @@ class _EmitPolicy(Enum):
 
 
 class _AnyIntValidator(QValidator):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
 
-    def validate(self, input: str, pos: int):
+    def validate(
+        self, input: str | None, pos: int
+    ) -> tuple[QValidator.State, str, int]:
+        if not input:
+            return QValidator.State.Intermediate, input, pos
         if not input.lstrip("-"):
             return QValidator.State.Intermediate, input, len(input)
         if input.lstrip("-").isnumeric():

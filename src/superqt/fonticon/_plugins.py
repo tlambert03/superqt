@@ -94,7 +94,7 @@ def available() -> Tuple[str]:
     return tuple(_manager._PLUGINS)
 
 
-def loaded(load_all=False) -> Dict[str, List[str]]:
+def loaded(load_all: bool = False) -> Dict[str, List[str]]:
     if load_all:
         discover()
         for x in available():

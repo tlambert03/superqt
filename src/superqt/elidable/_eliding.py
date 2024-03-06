@@ -1,7 +1,12 @@
-from typing import List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QFont, QFontMetrics, QTextLayout
+
+if TYPE_CHECKING:
+    from qtpy.QtWidgets import QLabel
 
 
 class _GenericEliding:
@@ -36,7 +41,7 @@ class _GenericEliding:
         self._ellipses_width = width
 
     @staticmethod
-    def wrapText(text, width, font=None) -> List[str]:
+    def wrapText(text: str, width: float, font: QFont | None = None) -> list[str]:
         """Returns `text`, split as it would be wrapped for `width`, given `font`.
 
         Static method.
@@ -58,21 +63,23 @@ class _GenericEliding:
 
     def _elidedText(self) -> str:
         """Return `self._text` elided to `width`."""
-        fm = QFontMetrics(self.font())
+        lbl = cast("QLabel", self)  # type: ignore
+        fm = QFontMetrics(lbl.font())
         ellipses_width = 0
         if self._elide_mode != Qt.TextElideMode.ElideNone:
             ellipses_width = self._ellipses_width
-        width = self.width() - ellipses_width
-        if not getattr(self, "wordWrap", None) or not self.wordWrap():
+        width = lbl.width() - ellipses_width
+        if not getattr(self, "wordWrap", None) or not lbl.wordWrap():
             return fm.elidedText(self._text, self._elide_mode, width)
 
         # get number of lines we can fit without eliding
-        nlines = self.height() // fm.height() - 1
+        nlines = lbl.height() // fm.height() - 1
         # get the last line (elided)
         text = self._wrappedText()
         last_line = fm.elidedText("".join(text[nlines:]), self._elide_mode, width)
         # join them
         return "".join(text[:nlines] + [last_line])
 
-    def _wrappedText(self) -> List[str]:
-        return _GenericEliding.wrapText(self._text, self.width(), self.font())
+    def _wrappedText(self) -> list[str]:
+        lbl = cast("QLabel", self)  # type: ignore
+        return _GenericEliding.wrapText(self._text, lbl.width(), lbl.font())

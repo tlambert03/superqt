@@ -16,7 +16,7 @@ IMAGES = Path(__file__).parent / "_auto_images"
 IMAGES.mkdir(exist_ok=True, parents=True)
 
 
-def define_env(env: "MacrosPlugin"):
+def define_env(env: "MacrosPlugin") -> None:
     @env.macro
     @pass_context
     def show_widget(context, width: int = 500) -> list[Path]:

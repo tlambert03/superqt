@@ -1,3 +1,5 @@
+from typing import Any
+
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QFocusEvent, QResizeEvent
 from qtpy.QtWidgets import QLineEdit
@@ -14,7 +16,7 @@ class QElidingLineEdit(_GenericEliding, QLineEdit):
 
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         if args and isinstance(args[0], str):
             self.setText(args[0])

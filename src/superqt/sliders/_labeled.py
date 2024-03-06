@@ -555,7 +555,7 @@ class QLabeledDoubleRangeSlider(QLabeledRangeSlider):
 
     def _rename_signals(self) -> None:
         super()._rename_signals()
-        self.rangeChanged = self._frangeChanged
+        self.rangeChanged = self._frangeChanged  # type: ignore
 
     def decimals(self) -> int:
         return self._min_label.decimals()

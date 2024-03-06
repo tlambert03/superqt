@@ -341,12 +341,12 @@ class _GenericSlider(QSlider, Generic[_T]):
     def _pick(self, pt: QPoint) -> int:
         return pt.x() if self.orientation() == Qt.Orientation.Horizontal else pt.y()
 
-    def _setSteps(self, single: float, page: float):
+    def _setSteps(self, single: float, page: float) -> None:
         self._singleStep = single
         self._pageStep = page
         self.sliderChange(QSlider.SliderChange.SliderStepsChange)
 
-    def _doSliderMove(self):
+    def _doSliderMove(self) -> None:
         if not self.hasTracking():
             self.update()
         if self.isSliderDown():
@@ -355,7 +355,7 @@ class _GenericSlider(QSlider, Generic[_T]):
             self.triggerAction(QSlider.SliderAction.SliderMove)
 
     @property
-    def _styleOption(self):
+    def _styleOption(self) -> QStyleOptionSlider:
         opt = QStyleOptionSlider()
         self.initStyleOption(opt)
         return opt
@@ -392,11 +392,11 @@ class _GenericSlider(QSlider, Generic[_T]):
             self._hoverControl = SC_NONE
         return self._hoverControl
 
-    def _setClickOffset(self, pos: QPoint):
+    def _setClickOffset(self, pos: QPoint) -> None:
         hr = self.style().subControlRect(CC_SLIDER, self._styleOption, SC_HANDLE, self)
         self._clickOffset = self._pick(pos - hr.topLeft())
 
-    def _updatePressedControl(self, pos: QPoint):
+    def _updatePressedControl(self, pos: QPoint) -> None:
         self._pressedControl = SC_HANDLE
 
     def _draw_handle(self, painter, opt):

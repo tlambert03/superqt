@@ -44,7 +44,6 @@ class CallCallable(QObject):
         self.finished.emit(res)
 
 
-# fmt: off
 @overload
 def ensure_main_thread(
     await_return: Literal[True],
@@ -67,10 +66,9 @@ def ensure_main_thread(
     await_return: Literal[False] = False,
     timeout: int = 1000,
 ) -> Callable[P, Future[R]]: ...
-# fmt: on
-def ensure_main_thread(
+def ensure_main_thread(  # type: ignore[misc]
     func: Callable | None = None, await_return: bool = False, timeout: int = 1000
-):
+) -> Any:
     """Decorator that ensures a function is called in the main QApplication thread.
 
     It can be applied to functions or methods.
@@ -87,11 +85,11 @@ def ensure_main_thread(
         before raising a TimeoutError, by default 1000
     """
 
-    def _out_func(func_):
+    def _out_func(func_: Callable[P, R]) -> Callable[P, R]:
         max_args = get_max_args(func_)
 
         @wraps(func_)
-        def _func(*args, _max_args_=max_args, **kwargs):
+        def _func(*args: Any, _max_args_: int | None = max_args, **kwargs: Any) -> Any:
             return _run_in_thread(
                 func_,
                 QCoreApplication.instance().thread(),
@@ -106,7 +104,6 @@ def ensure_main_thread(
     return _out_func if func is None else _out_func(func)
 
 
-# fmt: off
 @overload
 def ensure_object_thread(
     await_return: Literal[True],
@@ -129,10 +126,9 @@ def ensure_object_thread(
     await_return: Literal[False] = False,
     timeout: int = 1000,
 ) -> Callable[P, Future[R]]: ...
-# fmt: on
-def ensure_object_thread(
+def ensure_object_thread(  # type: ignore
     func: Callable | None = None, await_return: bool = False, timeout: int = 1000
-):
+) -> Any:
     """Decorator that ensures a QObject method is called in the object's thread.
 
     It must be applied to methods of QObjects subclasses.
@@ -153,7 +149,7 @@ def ensure_object_thread(
         max_args = get_max_args(func_)
 
         @wraps(func_)
-        def _func(*args, _max_args_=max_args, **kwargs):
+        def _func(*args: Any, _max_args_: int | None = max_args, **kwargs: Any) -> Any:
             thread = args[0].thread()  # self
             return _run_in_thread(
                 func_, thread, await_return, timeout, args[:_max_args_], kwargs
@@ -166,7 +162,7 @@ def ensure_object_thread(
 
 def _run_in_thread(
     func: Callable,
-    thread: QThread,
+    thread: QThread | None,
     await_return: bool,
     timeout: int,
     args: tuple,

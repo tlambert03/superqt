@@ -81,7 +81,7 @@ def _norm_state_mode(key: StateModeKey) -> tuple[QIcon.State, QIcon.Mode]:
                 "off, active, disabled, selected, normal} separated by underscore"
             ) from e
     else:
-        _sm = key if isinstance(key, abc.Sequence) else [key]
+        _sm = key if isinstance(key, abc.Sequence) else [key]  # type: ignore
 
     state = next((i for i in _sm if isinstance(i, QIcon.State)), QIcon.State.Off)
     mode = next((i for i in _sm if isinstance(i, QIcon.Mode)), QIcon.Mode.Normal)
@@ -221,11 +221,13 @@ class _QFontIconEngine(QIconEngine):
 
     def paint(
         self,
-        painter: QPainter,
+        painter: QPainter | None,
         rect: QRect,
         mode: QIcon.Mode,
         state: QIcon.State,
     ) -> None:
+        if painter is None:
+            painter = QPainter()
         opts = self._get_opts(state, mode)
 
         char, family, style = QFontIconStore.key2glyph(opts.glyph_key)
@@ -239,7 +241,7 @@ class _QFontIconEngine(QIconEngine):
 
         # color
         if isinstance(opts.color, tuple):
-            color_args = opts.color
+            color_args: tuple = opts.color
         else:
             color_args = (opts.color,) if opts.color else ()
 
@@ -282,9 +284,10 @@ class _QFontIconEngine(QIconEngine):
             if not ico_opts or not ico_opts.color:
                 opt = QStyleOption()
                 opt.palette = QGuiApplication.palette()
-                generated = QApplication.style().generatedIconPixmap(mode, pixmap, opt)
-                if not generated.isNull():
-                    pixmap = generated
+                if style := QApplication.style():
+                    generated = style.generatedIconPixmap(mode, pixmap, opt)
+                    if not generated.isNull():
+                        pixmap = generated
 
         if pmckey and not pixmap.isNull():
             QPixmapCache.insert(pmckey, pixmap)
@@ -299,7 +302,11 @@ class _QFontIconEngine(QIconEngine):
             mode = mode.value
         if hasattr(state, "value"):
             state = state.value
-        k = ((((((size.width()) << 11) | size.height()) << 11) | mode) << 4) | state
+
+        width_shifted = size.width() << 11
+        height_combined = width_shifted | size.height()
+        height_mode_combined = (height_combined << 11) | mode  # type: ignore
+        k = (height_mode_combined << 4) | state  # type: ignore
         return f"$superqt_{self._opt_hash}_{hex(k)}"
 
     def update_hash(self) -> None:
@@ -359,7 +366,7 @@ class QFontIconStore(QObject):
         super().__init__(parent=parent)
         if tuple(cast(str, QT_VERSION).split(".")) < ("6", "0"):
             # QT6 drops this
-            QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+            QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)  # type: ignore
 
     @classmethod
     def instance(cls) -> QFontIconStore:
@@ -478,7 +485,7 @@ class QFontIconStore(QObject):
 
         # in Qt6, everything becomes a static member
         QFd: QFontDatabase | type[QFontDatabase] = (
-            QFontDatabase()
+            QFontDatabase()  # type: ignore
             if tuple(cast(str, QT_VERSION).split(".")) < ("6", "0")
             else QFontDatabase
         )

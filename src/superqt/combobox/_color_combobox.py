@@ -3,9 +3,16 @@ from __future__ import annotations
 import warnings
 from contextlib import suppress
 from enum import IntEnum, auto
-from typing import Any, Literal, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
 
-from qtpy.QtCore import QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, Signal
+from qtpy.QtCore import (  # type: ignore
+    QModelIndex,
+    QPersistentModelIndex,
+    QRect,
+    QSize,
+    Qt,
+    Signal,
+)
 from qtpy.QtGui import QColor, QPainter
 from qtpy.QtWidgets import (
     QAbstractItemDelegate,
@@ -50,7 +57,7 @@ class _ColorComboLineEdit(QLineEdit):
         """
         parent = self.parent()
         if hasattr(parent, "showPopup"):
-            parent.showPopup()
+            parent.showPopup()  # type: ignore
 
 
 class _ColorComboItemDelegate(QAbstractItemDelegate):
@@ -68,10 +75,12 @@ class _ColorComboItemDelegate(QAbstractItemDelegate):
 
     def paint(
         self,
-        painter: QPainter,
+        painter: QPainter | None,
         option: QStyleOptionViewItem,
         index: QModelIndex | QPersistentModelIndex,
     ) -> None:
+        if painter is None:
+            painter = QPainter()
         color: QColor | None = index.data(COLOR_ROLE)
         rect = cast("QRect", option.rect)  # type: ignore
         state = cast("QStyle.StateFlag", option.state)  # type: ignore
@@ -119,6 +128,10 @@ class QColorComboBox(QComboBox):
     add_color_text: str, optional
         The text to display for the "Add Color" item. Default is "Add Color...".
     """
+
+    if TYPE_CHECKING:
+
+        def lineEdit(self) -> _ColorComboLineEdit: ...
 
     currentColorChanged = Signal(QColor)
 

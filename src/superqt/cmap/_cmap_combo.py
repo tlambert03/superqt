@@ -45,6 +45,10 @@ class QColormapComboBox(QComboBox):
         Default is "Add Colormap...".
     """
 
+    if TYPE_CHECKING:
+
+        def lineEdit(self) -> _PopupColormapLineEdit: ...
+
     currentColormapChanged = Signal(Colormap)
 
     def __init__(
@@ -206,7 +210,11 @@ class _CmapNameDialog(QDialog):
         # get valid names according to preferences
         word_list = Colormap.catalog().unique_keys(
             prefer_short_names=True,
-            categories={b.text() for b in self._btn_group.buttons() if b.isChecked()},
+            categories={
+                b.text()  # type: ignore
+                for b in self._btn_group.buttons()
+                if b.isChecked()
+            },
         )
         self.combo.clear()
         self.combo.addItems(sorted(word_list))

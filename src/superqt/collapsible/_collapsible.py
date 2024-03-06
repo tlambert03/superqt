@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from qtpy.QtCore import (
     QEasingCurve,
     QEvent,
@@ -62,9 +64,9 @@ class QCollapsible(QFrame):
 
         # default content widget
         _content = QWidget()
-        _content.setLayout(QVBoxLayout())
+        layout = QVBoxLayout(_content)
         _content.setMaximumHeight(0)
-        _content.layout().setContentsMargins(QMargins(5, 0, 0, 0))
+        layout.setContentsMargins(QMargins(5, 0, 0, 0))
         self.setContent(_content)
 
     def toggleButton(self) -> QPushButton:
@@ -82,7 +84,7 @@ class QCollapsible(QFrame):
     def setContent(self, content: QWidget) -> None:
         """Replace central widget (the widget that gets expanded/collapsed)."""
         self._content = content
-        self.layout().addWidget(self._content)
+        cast("QVBoxLayout", self.layout()).addWidget(self._content)
         self._animation.setTargetObject(content)
 
     def content(self) -> QWidget:

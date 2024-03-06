@@ -84,7 +84,7 @@ class QQuantity(QWidget):
                 )
 
         self._ureg = ureg
-        self._value: Quantity = self._ureg.Quantity(value, units=units)
+        self._value: Quantity = self._ureg.Quantity(value, units=units)  # type: ignore
 
         # whether to preserve quantity equality when changing units or magnitude
         self._preserve_quantity: bool = False
@@ -97,14 +97,16 @@ class QQuantity(QWidget):
         self._mag_spinbox.valueChanged.connect(self.setMagnitude)
 
         self._units_combo = QComboBox()
-        self._units_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self._units_combo.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
         self._units_combo.currentTextChanged.connect(self.setUnits)
         self._update_units_combo_choices()
 
-        self.setLayout(QHBoxLayout())
-        self.layout().addWidget(self._mag_spinbox)
-        self.layout().addWidget(self._units_combo)
-        self.layout().setContentsMargins(6, 0, 0, 0)
+        layout = QHBoxLayout(self)
+        layout.addWidget(self._mag_spinbox)
+        layout.addWidget(self._units_combo)
+        layout.setContentsMargins(6, 0, 0, 0)
 
     def unitRegistry(self) -> UnitRegistry:
         """Return the pint UnitRegistry used by this widget."""
@@ -151,7 +153,7 @@ class QQuantity(QWidget):
 
     def units(self) -> Unit:
         """Return the current units."""
-        return self._value.units
+        return self._value.units  # type: ignore
 
     def dimensionality(self) -> UnitsContainer:
         """Return the current dimensionality (cast to `str` for nice repr)."""
@@ -174,7 +176,7 @@ class QQuantity(QWidget):
                 raise ValueError("Cannot specify units if value is a Quantity")
             new_val = self._ureg.Quantity(value.magnitude, units=value.units)
         else:
-            new_val = self._ureg.Quantity(value, units=units)
+            new_val = self._ureg.Quantity(value, units=units)  # type: ignore
 
         mag_change = new_val.magnitude != self._value.magnitude
         units_change = new_val.units != self._value.units
@@ -188,7 +190,8 @@ class QQuantity(QWidget):
 
         if units_change:
             with signals_blocked(self._units_combo):
-                self._units_combo.setCurrentText(self._format_units(self._value.units))
+                formatted = self._format_units(self._value.units)  # type: ignore
+                self._units_combo.setCurrentText(formatted)
             self.unitsChanged.emit(self._value.units)
 
         if dims_changed:
@@ -211,9 +214,9 @@ class QQuantity(QWidget):
         if units is None:
             new_val = self._ureg.Quantity(self._value.magnitude)
         elif self.isDimensionless():
-            new_val = self._ureg.Quantity(self._value.magnitude, units)
+            new_val = self._ureg.Quantity(self._value.magnitude, units)  # type: ignore
         else:
-            new_val = self._value.to(units)
+            new_val = self._value.to(units)  # type: ignore
         self.setValue(new_val)
 
     def isDimensionless(self) -> bool:

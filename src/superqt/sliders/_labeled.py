@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 from enum import IntEnum, IntFlag, auto
 from functools import partial
-from typing import Any, Callable, overload
+from typing import Any, Callable, cast, overload
 
 from qtpy.QtCore import QPoint, QSize, Qt, Signal
 from qtpy.QtGui import QFontMetrics, QResizeEvent, QValidator
@@ -145,8 +145,9 @@ class QLabeledSlider(_SliderProxy, QAbstractSlider):
 
         super().__init__(parent)
         # accept focus events
-        fp = self.style().styleHint(QStyle.StyleHint.SH_Button_FocusPolicy)
-        self.setFocusPolicy(Qt.FocusPolicy(fp))
+        if style := self.style():
+            fp = style.styleHint(QStyle.StyleHint.SH_Button_FocusPolicy)
+            self.setFocusPolicy(Qt.FocusPolicy(fp))
 
         self._slider = self._slider_class(parent=self)
         self._label = SliderLabel(self._slider, connect=self._setValue, parent=self)
@@ -213,18 +214,18 @@ class QLabeledSlider(_SliderProxy, QAbstractSlider):
                 "'EdgeLabelMode.LabelIsValue' or"
                 "'EdgeLabelMode.LabelIsValue | EdgeLabelMode.LabelIsRange'."
             )
-
+        layout = cast(QBoxLayout, self.layout())
         self._edge_label_mode = opt
         if not self._edge_label_mode:
             self._label.hide()
             w = 5 if self.orientation() == Qt.Orientation.Horizontal else 0
-            self.layout().setContentsMargins(0, 0, w, 0)
+            layout.setContentsMargins(0, 0, w, 0)
         if opt & EdgeLabelMode.LabelIsValue:
             if self.isVisible():
                 self._label.show()
             self._label.setMode(opt)
             self._label.setValue(self._slider.value())
-            self.layout().setContentsMargins(0, 0, 0, 0)
+            layout.setContentsMargins(0, 0, 0, 0)
         self._on_slider_range_changed(self.minimum(), self.maximum())
 
         QApplication.processEvents()
@@ -277,9 +278,9 @@ class QLabeledDoubleSlider(QLabeledSlider):
         self._slider.setValue(value)
 
     def _rename_signals(self) -> None:
-        self.valueChanged = self._fvalueChanged
-        self.sliderMoved = self._fsliderMoved
-        self.rangeChanged = self._frangeChanged
+        self.valueChanged = self._fvalueChanged  # type: ignore
+        self.sliderMoved = self._fsliderMoved  # type: ignore
+        self.rangeChanged = self._frangeChanged  # type: ignore
 
     def decimals(self) -> int:
         return self._label.decimals()
@@ -440,7 +441,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
 
     # ------------- private methods ----------------
     def _rename_signals(self) -> None:
-        self.valueChanged = self._valueChanged
+        self.valueChanged = self._valueChanged  # type: ignore
 
     def _reposition_labels(self) -> None:
         if (
@@ -586,8 +587,8 @@ class SliderLabel(QDoubleSpinBox):
         self.setAlignment(alignment)
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.setStyleSheet("background:transparent; border: 0;")
-        if connect is not None:
-            self.editingFinished.connect(lambda: connect(self.value()))
+        if callable(connect):
+            self.editingFinished.connect(lambda: connect(self.value()))  # type: ignore
         self.editingFinished.connect(self._silent_clear_focus)
         self._update_size()
 
@@ -654,10 +655,11 @@ class SliderLabel(QDoubleSpinBox):
         # get the final size hint
         opt = QStyleOptionSpinBox()
         self.initStyleOption(opt)
-        size = self.style().sizeFromContents(
-            QStyle.ContentsType.CT_SpinBox, opt, QSize(w, h), self
-        )
-        self.setFixedSize(size)
+        if style := self.style():
+            size = style.sizeFromContents(
+                QStyle.ContentsType.CT_SpinBox, opt, QSize(w, h), self
+            )
+            self.setFixedSize(size)
 
     def validate(
         self, input_: str | None, pos: int

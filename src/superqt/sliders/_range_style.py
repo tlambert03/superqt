@@ -75,12 +75,12 @@ class RangeSliderStyle:
 
     def pen(self, opt: QStyleOptionSlider) -> Qt.PenStyle | QColor:
         cg = opt.palette.currentColorGroup()
-        attr = {
+        attr: str = {
             QPalette.ColorGroup.Active: "pen_active",  # 0
             QPalette.ColorGroup.Disabled: "pen_disabled",  # 1
             QPalette.ColorGroup.Inactive: "pen_inactive",  # 2
         }[cg]
-        val = getattr(self, attr) or getattr(SYSTEM_STYLE, attr)
+        val: str | QColor = getattr(self, attr) or getattr(SYSTEM_STYLE, attr)
         if not val:
             return Qt.PenStyle.NoPen
         if isinstance(val, str):

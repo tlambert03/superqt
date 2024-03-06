@@ -226,7 +226,9 @@ class ThrottledCallable(GenericSignalThrottler, Generic[P, R]):
         self.triggered.connect(self._set_future_result)
         self._name = None
 
-        self._obj_dkt = WeakKeyDictionary()
+        self._obj_dkt: WeakKeyDictionary[object, ThrottledCallable] = (
+            WeakKeyDictionary()
+        )
 
         # even if we were to compile __call__ with a signature matching that of func,
         # PySide wouldn't correctly inspect the signature of the ThrottledCallable

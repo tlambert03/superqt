@@ -6,7 +6,7 @@ from operator import or_
 from typing import Optional, Tuple, TypeVar
 
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QComboBox
+from qtpy.QtWidgets import QComboBox, QWidget
 
 EnumType = TypeVar("EnumType", bound=Enum)
 
@@ -14,7 +14,7 @@ EnumType = TypeVar("EnumType", bound=Enum)
 NONE_STRING = "----"
 
 
-def _get_name(enum_value: Enum):
+def _get_name(enum_value: Enum) -> str:
     """Create human readable name if user does not implement `__str__`."""
     str_module = getattr(enum_value.__str__, "__module__", "enum")
     if str_module != "enum" and not str_module.startswith("shibokensupport"):
@@ -61,8 +61,11 @@ class QEnumComboBox(QComboBox):
     currentEnumChanged = Signal(object)
 
     def __init__(
-        self, parent=None, enum_class: Optional[EnumMeta] = None, allow_none=False
-    ):
+        self,
+        parent: QWidget | None = None,
+        enum_class: Optional[EnumMeta] = None,
+        allow_none: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._enum_class = None
         self._allow_none = False
@@ -70,7 +73,7 @@ class QEnumComboBox(QComboBox):
             self.setEnumClass(enum_class, allow_none)
         self.currentIndexChanged.connect(self._emit_signal)
 
-    def setEnumClass(self, enum: Optional[EnumMeta], allow_none=False):
+    def setEnumClass(self, enum: Optional[EnumMeta], allow_none=False) -> None:
         """Set enum class from which members value should be selected."""
         self.clear()
         self._enum_class = enum
@@ -81,10 +84,10 @@ class QEnumComboBox(QComboBox):
         super().addItems(list(names_))
 
     @staticmethod
-    def _get_enum_member_list(enum: Optional[EnumMeta]):
+    def _get_enum_member_list(enum: Optional[EnumMeta]) -> dict[str, Enum]:
         if issubclass(enum, Flag):
             members = list(enum.__members__.values())
-            comb_list = []
+            comb_list: list[Flag] = []
             for i in range(len(members)):
                 comb_list.extend(reduce(or_, x) for x in combinations(members, i + 1))
 

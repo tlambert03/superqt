@@ -22,7 +22,7 @@ QRangeSlider.
 
 import os
 import platform
-from typing import TypeVar
+from typing import Any, Generic, TypeVar, cast
 
 from qtpy import QT_VERSION, QtGui
 from qtpy.QtCore import QEvent, QPoint, QPointF, QRect, Qt, Signal
@@ -36,7 +36,7 @@ from qtpy.QtWidgets import (
 
 from ._range_style import MONTEREY_SLIDER_STYLES_FIX
 
-_T = TypeVar("_T")
+_T = TypeVar("_T", bound=float)
 
 SC_NONE = QStyle.SubControl.SC_None
 SC_HANDLE = QStyle.SubControl.SC_SliderHandle
@@ -59,19 +59,19 @@ USE_MAC_SLIDER_PATCH = (
 )
 
 
-class _GenericSlider(QSlider):
+class _GenericSlider(QSlider, Generic[_T]):
     _fvalueChanged = Signal(int)
     _fsliderMoved = Signal(int)
     _frangeChanged = Signal(int, int)
 
     MAX_DISPLAY = 5000
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._minimum = 0.0
         self._maximum = 99.0
         self._pageStep = 10.0
         self._value: _T = 0.0  # type: ignore
-        self._position: _T = 0.0
+        self._position: _T = 0.0  # type: ignore
         self._singleStep = 1.0
         self._offsetAccumulated = 0.0
         self._blocktracking = False
@@ -89,16 +89,16 @@ class _GenericSlider(QSlider):
         self._control_fraction = 0.04
 
         super().__init__(*args, **kwargs)
-        self.valueChanged = self._fvalueChanged
-        self.sliderMoved = self._fsliderMoved
-        self.rangeChanged = self._frangeChanged
+        self.valueChanged = self._fvalueChanged  # type: ignore
+        self.sliderMoved = self._fsliderMoved  # type: ignore
+        self.rangeChanged = self._frangeChanged  # type: ignore
 
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setStyleSheet("")
         if USE_MAC_SLIDER_PATCH:
             self.applyMacStylePatch()
 
-    def applyMacStylePatch(self) -> str:
+    def applyMacStylePatch(self) -> None:
         """Apply a QSS patch to fix sliders on macos>=12 with QT < 6.
 
         see [FAQ](../faq.md#sliders-not-dragging-properly-on-macos-12) for more details.
@@ -321,8 +321,8 @@ class _GenericSlider(QSlider):
 
     # ###############  Implementation Details  #######################
 
-    def _type_cast(self, val):
-        return val
+    def _type_cast(self, val: Any) -> _T:
+        return cast(_T, val)
 
     def _setPosition(self, val):
         self._position = val
@@ -512,7 +512,7 @@ class _GenericSlider(QSlider):
 def _event_position(ev: QEvent) -> QPoint:
     # safe for Qt6, Qt5, and hoverEvent
     evp = getattr(ev, "position", getattr(ev, "pos", None))
-    pos = evp() if evp else QPoint()
+    pos = cast("QPoint | QPointF", evp() if evp else QPoint())
     if isinstance(pos, QPointF):
         pos = pos.toPoint()
     return pos

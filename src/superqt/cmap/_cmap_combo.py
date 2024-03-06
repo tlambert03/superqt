@@ -100,7 +100,7 @@ class QColormapComboBox(QComboBox):
 
     def itemColormap(self, index: int) -> Colormap | None:
         """Returns the color of the item at the given index."""
-        return self.itemData(index, CMAP_ROLE)
+        return self.itemData(index, CMAP_ROLE)  # type: ignore
 
     def addColormap(self, cmap: ColorStopsLike) -> None:
         """Adds the colormap to the QComboBox."""
@@ -133,7 +133,7 @@ class QColormapComboBox(QComboBox):
 
     def currentColormap(self) -> Colormap | None:
         """Returns the currently selected Colormap or None if not yet selected."""
-        return self.currentData(CMAP_ROLE)
+        return self.currentData(CMAP_ROLE)  # type: ignore
 
     def setCurrentColormap(self, color: Any) -> None:
         """Adds the color to the QComboBox and selects it."""

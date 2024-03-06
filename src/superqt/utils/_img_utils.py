@@ -30,6 +30,8 @@ def qimage_to_array(img: QImage) -> "np.ndarray":
 
     # pyside returns a memoryview, pyqt returns a sizeless void pointer
     b = img.constBits()  # Returns a pointer to the first pixel data.
+    if b is None:
+        raise ValueError("Image data is null")
     if hasattr(b, "setsize"):
         b.setsize(h * w * c)
 
@@ -37,4 +39,4 @@ def qimage_to_array(img: QImage) -> "np.ndarray":
     arr = np.frombuffer(b, np.uint8).reshape(h, w, c)
 
     # reverse channel colors for numpy
-    return arr.take([2, 1, 0, 3], axis=2)
+    return arr.take([2, 1, 0, 3], axis=2)  # type: ignore [no-any-return]

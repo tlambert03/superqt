@@ -23,5 +23,7 @@ repos:
         exclude: tests|examples
         additional_dependencies:
           - types-Pygments
-        stages:
-          - manual
+          - qtpy
+          - PyQt6
+          - pint
+          - cmap

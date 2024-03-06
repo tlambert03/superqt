@@ -211,7 +211,7 @@ class QColorComboBox(QComboBox):
 
     def itemColor(self, index: int) -> QColor | None:
         """Returns the color of the item at the given index."""
-        return self.itemData(index, COLOR_ROLE)
+        return self.itemData(index, COLOR_ROLE)  # type: ignore
 
     def addColors(self, colors: Sequence[Any]) -> None:
         """Adds colors to the QComboBox."""
@@ -220,7 +220,7 @@ class QColorComboBox(QComboBox):
 
     def currentColor(self) -> QColor | None:
         """Returns the currently selected QColor or None if not yet selected."""
-        return self.currentData(COLOR_ROLE)
+        return self.currentData(COLOR_ROLE)  # type: ignore
 
     def setCurrentColor(self, color: Any) -> None:
         """Adds the color to the QComboBox and selects it."""

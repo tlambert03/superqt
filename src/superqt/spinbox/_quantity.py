@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 try:
     from pint import Quantity, Unit, UnitRegistry
@@ -145,7 +145,7 @@ class QQuantity(QWidget):
     def text(self) -> str:
         return str(self._value)
 
-    def magnitude(self) -> Union[float, int]:
+    def magnitude(self) -> Any:
         """Return the magnitude of the current value."""
         return self._value.magnitude
 

@@ -13,6 +13,7 @@ from typing import (
     Generic,
     Sequence,
     TypeVar,
+    cast,
     overload,
 )
 
@@ -64,7 +65,6 @@ def as_generator_function(
 class WorkerBaseSignals(QObject):
     started = Signal()  # emitted when the work is started
     finished = Signal()  # emitted when the work is finished
-    _finished = Signal(object)  # emitted when the work is finished to delete
     returned = Signal(object)  # emitted with return value
     errored = Signal(object)  # emitted with error object on Exception
     warned = Signal(tuple)  # emitted with showwarning args on warning
@@ -102,26 +102,12 @@ class WorkerBase(QRunnable, Generic[_R]):
         self._running = False
         self.signals = SignalsClass()
 
-    def __getattr__(self, name: str) -> SigInst:
-        """Pass through attr requests to signals to simplify connection API.
-
-        The goal is to enable `worker.yielded.connect` instead of
-        `worker.signals.yielded.connect`. Because multiple inheritance of Qt
-        classes is not well supported in PyQt, we have to use composition here
-        (signals are provided by QObjects, and QRunnable is not a QObject). So
-        this passthrough allows us to connect to signals on the `_signals`
-        object.
-        """
-        # the Signal object is actually a class attribute
-        attr = getattr(self.signals.__class__, name, None)
-        if isinstance(attr, Signal):
-            # but what we need to connect to is the instantiated signal
-            # (which is of type `SignalInstance` in PySide and
-            # `pyqtBoundSignal` in PyQt)
-            return getattr(self.signals, name)
-        raise AttributeError(
-            f"{self.__class__.__name__!r} object has no attribute {name!r}"
-        )
+        # make the signals available as attributes of the worker
+        self.returned = self.signals.returned
+        self.errored = self.signals.errored
+        self.warned = self.signals.warned
+        self.started = self.signals.started
+        self.finished = self.signals.finished
 
     def quit(self) -> None:
         """Send a request to abort the worker.
@@ -193,7 +179,7 @@ class WorkerBase(QRunnable, Generic[_R]):
             self.errored.emit(exc)
         self._running = False
         self.finished.emit()
-        self._finished.emit(self)
+        self._set_discard(self)
 
     def work(self) -> Exception | _R:
         """Main method to execute the worker.
@@ -245,7 +231,6 @@ class WorkerBase(QRunnable, Generic[_R]):
         repr(self)
 
         self._worker_set.add(self)
-        self._finished.connect(self._set_discard)
         if QThread.currentThread().loopLevel():
             # if we're in a thread with an eventloop, queue the worker to start
             start_ = partial(QThreadPool.globalInstance().start, self)
@@ -338,7 +323,7 @@ class FunctionWorker(WorkerBase[_R]):
         If `func` is a generator function and not a regular function.
     """
 
-    def __init__(self, func: Callable[_P, _R], *args, **kwargs):
+    def __init__(self, func: Callable[_P, _R], *args: Any, **kwargs: Any) -> None:
         if inspect.isgeneratorfunction(func):
             raise TypeError(
                 f"Generator function {func} cannot be used with FunctionWorker, "
@@ -389,16 +374,22 @@ class GeneratorWorker(WorkerBase, Generic[_Y, _S, _R]):
     def __init__(
         self,
         func: Callable[_P, Generator[_Y, _S | None, _R]],
-        *args,
-        SignalsClass: type[WorkerBaseSignals] = GeneratorWorkerSignals,
-        **kwargs,
-    ):
+        *args: Any,
+        SignalsClass: type[GeneratorWorkerSignals] = GeneratorWorkerSignals,
+        **kwargs: Any,
+    ) -> None:
         if not inspect.isgeneratorfunction(func):
             raise TypeError(
                 f"Regular function {func} cannot be used with GeneratorWorker, "
                 "use FunctionWorker instead",
             )
         super().__init__(SignalsClass=SignalsClass)
+
+        sigs = cast(GeneratorWorkerSignals, self.signals)
+        self.yielded = sigs.yielded
+        self.paused = sigs.paused
+        self.resumed = sigs.resumed
+        self.aborted = sigs.aborted
 
         self._gen = func(*args, **kwargs)
         self._incoming_value: _S | None = None
@@ -440,7 +431,7 @@ class GeneratorWorker(WorkerBase, Generic[_Y, _S, _R]):
                 output = self._gen.send(_input)
                 self.yielded.emit(output)
             except StopIteration as exc:
-                return exc.value
+                return cast(_R, exc.value)
             except RuntimeError as exc:
                 # The worker has probably been deleted.  warning will be
                 # emitted in `WorkerBase.run`

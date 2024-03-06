@@ -309,7 +309,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         self._rename_signals()
 
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._handle_labels = []
+        self._handle_labels: list[SliderLabel] = []
         self._handle_label_position: LabelPosition = LabelPosition.LabelsAbove
 
         # for fine tuning label position
@@ -319,7 +319,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         self._slider = self._slider_class()
         self._slider.valueChanged.connect(self.valueChanged.emit)
         self._slider.rangeChanged.connect(self.rangeChanged.emit)
-        self.sliderMoved = self._slider._slidersMoved
+        self.sliderMoved = self._slider._slidersMoved  # type: ignore
 
         self._min_label = SliderLabel(
             self._slider,
@@ -375,6 +375,8 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
             self._min_label.setMode(opt)
             self._max_label.setMode(opt)
         if opt == EdgeLabelMode.LabelIsValue:
+            v0: int
+            v1: int
             v0, *_, v1 = self._slider.value()
             self._min_label.setValue(v0)
             self._max_label.setValue(v1)
@@ -483,7 +485,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         if self._edge_label_mode == EdgeLabelMode.LabelIsRange:
             self.setMinimum(val)
         else:
-            v = list(self._slider.value())
+            v: list[float] = list(self._slider.value())
             v[0] = val
             self.setValue(v)
         self._reposition_labels()
@@ -492,7 +494,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         if self._edge_label_mode == EdgeLabelMode.LabelIsRange:
             self.setMaximum(val)
         else:
-            v = list(self._slider.value())
+            v: list[float] = list(self._slider.value())
             v[-1] = val
             self.setValue(v)
         self._reposition_labels()
@@ -507,6 +509,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
                 lbl.setParent(None)
                 lbl.deleteLater()
             self._handle_labels.clear()
+            val: int
             for n, val in enumerate(self._slider.value()):
                 _cb = partial(self._slider.setSliderPosition, index=n)
                 s = SliderLabel(self._slider, parent=self, connect=_cb)
@@ -592,7 +595,7 @@ class SliderLabel(QDoubleSpinBox):
         super().setDecimals(prec)
         self._update_size()
 
-    def setValue(self, val: Any) -> None:
+    def setValue(self, val: float) -> None:
         super().setValue(val)
         if self._mode == EdgeLabelMode.LabelIsRange:
             self._update_size()
@@ -668,4 +671,4 @@ class SliderLabel(QDoubleSpinBox):
 def _fm_width(fm: QFontMetrics, text: str) -> int:
     if hasattr(fm, "horizontalAdvance"):
         return fm.horizontalAdvance(text)
-    return fm.width(text)
+    return fm.width(text)  # type: ignore

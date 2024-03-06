@@ -124,7 +124,9 @@ class _GenericRangeSlider(_GenericSlider):
         """
         return tuple(float(i) for i in self._position)
 
-    def setSliderPosition(self, pos: Union[float, Sequence[float]], index=None) -> None:
+    def setSliderPosition(
+        self, pos: Union[float, Sequence[float]], index: int | None = None
+    ) -> None:
         """Set current position of the handles with a sequence of integers.
 
         If `pos` is a sequence, it must have the same length as `value()`.
@@ -144,10 +146,12 @@ class _GenericRangeSlider(_GenericSlider):
 
         self._doSliderMove()
 
-    def setStyleSheet(self, styleSheet: str) -> None:
-        return super().setStyleSheet(self._patch_style(styleSheet))
+    def setStyleSheet(self, styleSheet: str | None) -> None:
+        if isinstance(styleSheet, str):
+            return super().setStyleSheet(self._patch_style(styleSheet))
+        return super().setStyleSheet(None)
 
-    def _patch_style(self, style: str):
+    def _patch_style(self, style: str) -> str:
         """Override to patch style options before painting."""
         # sub-page styles render on top of the lower sliders and don't work here.
         if self._style._macpatch and not style:
@@ -213,7 +217,9 @@ class _GenericRangeSlider(_GenericSlider):
     barColor = Property(QtGui.QBrush, _getBarColor, _setBarColor)
     """The color of the bar between the first and last handle."""
 
-    def _offsetAllPositions(self, offset: float, ref=None) -> None:
+    def _offsetAllPositions(
+        self, offset: float, ref: list[float] | None = None
+    ) -> None:
         if ref is None:
             ref = self._position
         if self._bar_is_rigid:
@@ -265,7 +271,7 @@ class _GenericRangeSlider(_GenericSlider):
 
     # Painting
 
-    def _drawBar(self, painter: QStylePainter, opt: QStyleOptionSlider):
+    def _drawBar(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
         brush = self._style.brush(opt)
         r_bar = self._barRect(opt)
         if isinstance(brush, QtGui.QGradient):
@@ -275,7 +281,7 @@ class _GenericRangeSlider(_GenericSlider):
         painter.setBrush(brush)
         painter.drawRect(r_bar)
 
-    def _draw_handle(self, painter: QStylePainter, opt: QStyleOptionSlider):
+    def _draw_handle(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
         if self._should_draw_bar:
             self._drawBar(painter, opt)
 
@@ -350,7 +356,9 @@ class _GenericRangeSlider(_GenericSlider):
             offset < 0 and min(self._value) < self._minimum
         )
 
-    def _spreadAllPositions(self, shrink=False, gain=1.1, ref=None) -> None:
+    def _spreadAllPositions(
+        self, shrink: bool = False, gain: float = 1.1, ref: list[float] | None = None
+    ) -> None:
         if ref is None:
             ref = self._position
         # if self._bar_is_rigid:  # TODO

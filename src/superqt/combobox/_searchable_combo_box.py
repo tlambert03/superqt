@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Iterable, Optional
 
 from qtpy import QT_VERSION
 from qtpy.QtCore import Qt, Signal
@@ -20,29 +20,31 @@ class QSearchableComboBox(QComboBox):
         super().__init__(parent)
         self.setEditable(True)
         self.completer_object = QCompleter()
-        self.completer_object.setCaseSensitivity(Qt.CaseInsensitive)
-        self.completer_object.setCompletionMode(QCompleter.PopupCompletion)
-        self.completer_object.setFilterMode(Qt.MatchContains)
+        self.completer_object.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer_object.setCompletionMode(
+            QCompleter.CompletionMode.PopupCompletion
+        )
+        self.completer_object.setFilterMode(Qt.MatchFlag.MatchContains)
         self.setCompleter(self.completer_object)
-        self.setInsertPolicy(QComboBox.NoInsert)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         if is_qt_bellow_5_14:  # pragma: no cover
             self.currentIndexChanged.connect(self._text_activated)
 
     def _text_activated(self):  # pragma: no cover
         self.textActivated.emit(self.currentText())
 
-    def addItem(self, *args):
+    def addItem(self, *args: Any) -> None:
         super().addItem(*args)
         self.completer_object.setModel(self.model())
 
-    def addItems(self, *args):
-        super().addItems(*args)
+    def addItems(self, texts: Iterable[str | None]) -> None:
+        super().addItems(texts)
         self.completer_object.setModel(self.model())
 
-    def insertItem(self, *args) -> None:
+    def insertItem(self, *args: Any) -> None:
         super().insertItem(*args)
         self.completer_object.setModel(self.model())
 
-    def insertItems(self, *args) -> None:
-        super().insertItems(*args)
+    def insertItems(self, index: int, texts: Iterable[str | None]) -> None:
+        super().insertItems(index, texts)
         self.completer_object.setModel(self.model())

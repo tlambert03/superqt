@@ -27,7 +27,7 @@ class QSearchableTreeWidget(QWidget):
         regular expression.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self.tree: QTreeWidget = QTreeWidget(self)

@@ -3,10 +3,10 @@ from __future__ import annotations
 import contextlib
 from enum import IntEnum, IntFlag, auto
 from functools import partial
-from typing import Any, overload
+from typing import Any, Callable, overload
 
 from qtpy.QtCore import QPoint, QSize, Qt, Signal
-from qtpy.QtGui import QFontMetrics, QValidator
+from qtpy.QtGui import QFontMetrics, QResizeEvent, QValidator
 from qtpy.QtWidgets import (
     QAbstractSlider,
     QApplication,
@@ -430,7 +430,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         QApplication.processEvents()
         self._reposition_labels()
 
-    def resizeEvent(self, a0) -> None:
+    def resizeEvent(self, a0: QResizeEvent | None) -> None:
         super().resizeEvent(a0)
         self._reposition_labels()
 
@@ -571,9 +571,9 @@ class SliderLabel(QDoubleSpinBox):
     def __init__(
         self,
         slider: QSlider,
-        parent=None,
-        alignment=Qt.AlignmentFlag.AlignCenter,
-        connect=None,
+        parent: QWidget | None = None,
+        alignment: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignCenter,
+        connect: Callable[[float], None] | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._slider = slider

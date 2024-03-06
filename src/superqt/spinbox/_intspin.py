@@ -2,8 +2,8 @@ import math
 from enum import Enum
 
 from qtpy.QtCore import QObject, QSize, Qt, Signal
-from qtpy.QtGui import QFontMetrics, QValidator
-from qtpy.QtWidgets import QAbstractSpinBox, QStyle, QStyleOptionSpinBox
+from qtpy.QtGui import QCloseEvent, QFocusEvent, QFontMetrics, QKeyEvent, QValidator
+from qtpy.QtWidgets import QAbstractSpinBox, QStyle, QStyleOptionSpinBox, QWidget
 
 
 class _EmitPolicy(Enum):
@@ -41,7 +41,7 @@ class QLargeIntSpinBox(QAbstractSpinBox):
     textChanged = Signal(str)
     valueChanged = Signal(object)  # object instead of int for large ints
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._value: int = 0
         self._minimum: int = 0
@@ -102,18 +102,18 @@ class QLargeIntSpinBox(QAbstractSpinBox):
 
     # ###############  QtOverrides  #######################
 
-    def focusOutEvent(self, e) -> None:
+    def focusOutEvent(self, e: QFocusEvent | None) -> None:
         if self._pending_emit:
             self._interpret(_EmitPolicy.EmitIfChanged)
         return super().focusOutEvent(e)
 
-    def closeEvent(self, e) -> None:
+    def closeEvent(self, e: QCloseEvent | None) -> None:
         if self._pending_emit:
             self._interpret(_EmitPolicy.EmitIfChanged)
         return super().closeEvent(e)
 
-    def keyPressEvent(self, e) -> None:
-        if e.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+    def keyPressEvent(self, e: QKeyEvent | None) -> None:
+        if e and e.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
             self._interpret(
                 _EmitPolicy.AlwaysEmit
                 if self.keyboardTracking()

@@ -432,7 +432,9 @@ class _GenericSlider(QSlider, Generic[_T]):
             opt.upsideDown,
         )
 
-    def _scrollByDelta(self, orientation, modifiers, delta: int) -> bool:
+    def _scrollByDelta(
+        self, orientation: Qt.Orientation, modifiers: Qt.KeyboardModifier, delta: int
+    ) -> bool:
         steps_to_scroll = 0.0
         pg_step = self._pageStep
 

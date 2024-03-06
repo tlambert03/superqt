@@ -9,7 +9,7 @@ class _IntMixin:
         super().__init__(*args, **kwargs)
         self._singleStep = 1
 
-    def _type_cast(self, value) -> int:
+    def _type_cast(self, value: float) -> int:
         return int(round(value))
 
 
@@ -23,7 +23,7 @@ class _FloatMixin:
         self._singleStep = 0.01
         self._pageStep = 0.1
 
-    def _type_cast(self, value) -> float:
+    def _type_cast(self, value: float) -> float:
         return float(value)
 
 

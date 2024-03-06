@@ -3,7 +3,7 @@ from qtpy.QtWidgets import QLineEdit, QListWidget, QVBoxLayout, QWidget
 
 
 class QSearchableListWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self.list_widget = QListWidget()

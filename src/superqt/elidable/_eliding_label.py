@@ -1,3 +1,5 @@
+from typing import Any
+
 from qtpy.QtCore import QPoint, QRect, QSize, Qt
 from qtpy.QtGui import QFontMetrics, QResizeEvent
 from qtpy.QtWidgets import QLabel
@@ -19,7 +21,7 @@ class QElidingLabel(_GenericEliding, QLabel):
     the full text.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         if args and isinstance(args[0], str):
             self.setText(args[0])

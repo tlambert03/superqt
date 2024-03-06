@@ -57,7 +57,7 @@ class QElidingLineEdit(_GenericEliding, QLineEdit):
         """
         return self._text
 
-    def setText(self, text) -> None:
+    def setText(self, text: str) -> None:
         """Set the line edit's text.
 
         Setting the text clears any previous content.

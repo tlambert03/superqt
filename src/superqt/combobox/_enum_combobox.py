@@ -73,7 +73,7 @@ class QEnumComboBox(QComboBox):
             self.setEnumClass(enum_class, allow_none)
         self.currentIndexChanged.connect(self._emit_signal)
 
-    def setEnumClass(self, enum: Optional[EnumMeta], allow_none=False) -> None:
+    def setEnumClass(self, enum: Optional[EnumMeta], allow_none: bool = False) -> None:
         """Set enum class from which members value should be selected."""
         self.clear()
         self._enum_class = enum

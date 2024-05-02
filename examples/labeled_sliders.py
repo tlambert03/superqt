@@ -35,7 +35,7 @@ qldrs.valueChanged.connect(lambda e: print("qlrs valueChanged", e))
 qldrs.setRange(0, 1)
 qldrs.setSingleStep(0.01)
 qldrs.setValue((0.2, 0.7))
-
+qldrs.setStyleSheet("font-size: 8pt;")
 
 w.setLayout(
     QVBoxLayout() if ORIENTATION == Qt.Orientation.Horizontal else QHBoxLayout()

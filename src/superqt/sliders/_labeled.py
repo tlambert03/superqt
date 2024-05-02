@@ -158,6 +158,9 @@ def _handle_overloaded_slider_sig(
 
 class QLabeledSlider(_SliderProxy, QAbstractSlider):
     editingFinished = Signal()
+    _ivalueChanged = Signal(int)
+    _isliderMoved = Signal(int)
+    _irangeChanged = Signal(int, int)
 
     _slider_class = QSlider
     _slider: QSlider
@@ -257,7 +260,7 @@ class QLabeledSlider(_SliderProxy, QAbstractSlider):
             self.layout().setContentsMargins(0, 0, 0, 0)
         self._on_slider_range_changed(self.minimum(), self.maximum())
 
-        QApplication.processEvents()
+        # QApplication.processEvents()
 
     # putting this after labelMode methods for the sake of mypy
     EdgeLabelMode = EdgeLabelMode
@@ -279,8 +282,9 @@ class QLabeledSlider(_SliderProxy, QAbstractSlider):
         self._slider.setValue(int(value))
 
     def _rename_signals(self) -> None:
-        # for subclasses
-        pass
+        self.valueChanged = self._ivalueChanged
+        self.sliderMoved = self._isliderMoved
+        self.rangeChanged = self._irangeChanged
 
 
 class QLabeledDoubleSlider(QLabeledSlider):
@@ -415,7 +419,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         elif opt == EdgeLabelMode.LabelIsRange:
             self._min_label.setValue(self._slider.minimum())
             self._max_label.setValue(self._slider.maximum())
-        QApplication.processEvents()
+        # QApplication.processEvents()
         self._reposition_labels()
 
     def setRange(self, min: int, max: int) -> None:
@@ -465,7 +469,7 @@ class QLabeledRangeSlider(_SliderProxy, QAbstractSlider):
         self.setLayout(layout)
         layout.setContentsMargins(*marg)
         super().setOrientation(orientation)
-        QApplication.processEvents()
+        # QApplication.processEvents()
         self._reposition_labels()
 
     def setInvertedAppearance(self, a0: bool) -> None:

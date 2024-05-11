@@ -23,6 +23,7 @@ from .sliders import (
     QRangeSlider,
 )
 from .spinbox import QLargeIntSpinBox
+from .stack_viewer import QStackViewer
 from .utils import QMessageHandler, ensure_main_thread, ensure_object_thread
 
 __all__ = [
@@ -36,8 +37,8 @@ __all__ = [
     "QElidingLabel",
     "QElidingLineEdit",
     "QEnumComboBox",
-    "QLabeledDoubleRangeSlider",
     "QIconifyIcon",
+    "QLabeledDoubleRangeSlider",
     "QLabeledDoubleSlider",
     "QLabeledRangeSlider",
     "QLabeledSlider",
@@ -48,6 +49,7 @@ __all__ = [
     "QSearchableComboBox",
     "QSearchableListWidget",
     "QSearchableTreeWidget",
+    "QStackViewer",
 ]
 
 if TYPE_CHECKING:

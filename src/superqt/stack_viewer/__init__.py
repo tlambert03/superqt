@@ -1,3 +1,3 @@
-from ._stack_viewer import StackViewer
+from ._stack_viewer import QStackViewer
 
-__all__ = ["StackViewer"]
+__all__ = ["QStackViewer"]

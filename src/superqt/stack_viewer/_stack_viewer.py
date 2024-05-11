@@ -8,8 +8,11 @@ from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, cast
 import cmap
 import numpy as np
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
-from superqt import QCollapsible, QElidingLabel, QIconifyIcon, ensure_main_thread
-from superqt.utils import qthrottled
+
+from superqt.collapsible import QCollapsible
+from superqt.elidable import QElidingLabel
+from superqt.iconify import QIconifyIcon
+from superqt.utils import ensure_main_thread, qthrottled
 
 from ._backends import get_canvas
 from ._dims_slider import DimsSliders
@@ -64,7 +67,7 @@ class ChannelModeButton(QPushButton):
         self.setChecked(mode == ChannelMode.MONO)
 
 
-class StackViewer(QWidget):
+class QStackViewer(QWidget):
     """A viewer for ND arrays."""
 
     def __init__(

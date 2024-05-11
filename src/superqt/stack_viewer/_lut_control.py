@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Iterable, cast
 import numpy as np
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QPushButton, QWidget
+
 from superqt import QLabeledRangeSlider
 from superqt.cmap import QColormapComboBox
 from superqt.utils import signals_blocked
@@ -93,7 +94,7 @@ class LutControl(QWidget):
             handle.cmap = cmap
 
     def update_autoscale(self) -> None:
-        if not self._auto_clim.isChecked():
+        if not self._auto_clim.isChecked() or not self._handles:
             return
 
         # find the min and max values for the current channel
@@ -101,6 +102,10 @@ class LutControl(QWidget):
         for handle in self._handles:
             clims[0] = min(clims[0], np.nanmin(handle.data))
             clims[1] = max(clims[1], np.nanmax(handle.data))
+
+        # if either are unset, return
+        if np.isinf(clims[0]) or np.isinf(clims[1]):
+            return
 
         mi, ma = tuple(int(x) for x in clims)
         if mi != ma:

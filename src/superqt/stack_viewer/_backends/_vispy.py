@@ -4,8 +4,9 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 import numpy as np
-from superqt.utils import qthrottled
 from vispy import scene
+
+from superqt.utils import qthrottled
 
 if TYPE_CHECKING:
     import cmap

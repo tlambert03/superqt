@@ -49,6 +49,15 @@ QSlider::handle:horizontal {
     border-radius: 7px;
 }
 """
+# (the bar, with Qt >= 6.10.1: before, superqt ignored sub-pages and add-pages)
+PAGES = (
+    QSS
+    + """
+QSlider::sub-page:horizontal { background: seagreen; border-radius: 3px; }
+QSlider::sub-page:horizontal:disabled { background: #9a9a9a; }
+QSlider::add-page:horizontal { background: #d8d8d8; border-radius: 3px; }
+"""
+)
 NDV_GRADIENT = (
     "QRangeSlider { qproperty-barColor: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
     "stop:0 #6e5a87, stop:1 #c9a0ff); }"
@@ -90,6 +99,8 @@ def _variants() -> list[tuple[str, QWidget]]:
         ("barColor gradient", gradient),
         ("QSS groove", rs(H, setStyleSheet=QSS)),
         ("QSS + barColor", qss_color),
+        ("QSS sub-page", rs(H, setStyleSheet=PAGES)),
+        ("QSS sub-page, disabled", rs(H, setStyleSheet=PAGES, setEnabled=False)),
         ("ndv gradient", rs(H, setStyleSheet=NDV_GRADIENT)),
         ("mac style patch", patched),
         ("labeled", rs(H, cls=QLabeledRangeSlider)),

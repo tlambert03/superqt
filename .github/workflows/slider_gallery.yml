@@ -81,3 +81,71 @@ jobs:
         with:
           name: gallery-${{ matrix.os }}-${{ matrix.qt }}
           path: gallery
+
+  # the same, with older Qt 6 versions (style sheets' sub-pages changed in 6.10.1)
+  qt-versions:
+    name: ${{ matrix.os }} Qt ${{ matrix.qt.v }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-2025, ubuntu-24.04]
+        # (Qt, and the minor versions of the bindings that go with it)
+        qt:
+          - { v: "6.5.3", from: "6.5", to: "6.6" }
+          - { v: "6.8.2", from: "6.8", to: "6.9" }
+          - { v: "6.9.2", from: "6.9", to: "6.10" }
+          - { v: "6.10.0", from: "6.10", to: "6.11" }
+          - { v: "6.10.1", from: "6.10", to: "6.11" }
+          - { v: "6.11.2", from: "6.11", to: "6.12" }
+    env:
+      QT_API: pyqt6
+      MAIN: "superqt @ git+https://github.com/pyapp-kit/superqt@main"
+      QT: >-
+        --with pyqt6-qt6==${{ matrix.qt.v }}
+        --with "pyqt6>=${{ matrix.qt.from }},<${{ matrix.qt.to }}"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.13"
+
+      - if: runner.os == 'Linux'
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+
+      - name: Render with main
+        run: >
+          uv run --no-project --isolated ${{ env.QT }} --with "${{ env.MAIN }}"
+          python .github/slider_gallery.py render before gallery styles
+
+      - name: Render with main, with napari's style sheets
+        continue-on-error: true
+        run: >
+          uv run --no-project --isolated ${{ env.QT }} --with "${{ env.MAIN }}"
+          python .github/slider_gallery.py render before gallery napari
+
+      - name: Render with this branch
+        run: >
+          uv run --no-project --isolated ${{ env.QT }} --with-editable .
+          python .github/slider_gallery.py render after gallery styles
+
+      - name: Render with this branch, with napari's style sheets
+        run: >
+          uv run --no-project --isolated ${{ env.QT }} --with-editable .
+          python .github/slider_gallery.py render after gallery napari
+
+      - name: Compose
+        run: >
+          uv run --no-project --isolated ${{ env.QT }} --with-editable .
+          python .github/slider_gallery.py compose gallery
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gallery-${{ matrix.os }}-qt${{ matrix.qt.v }}
+          path: gallery

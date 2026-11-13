@@ -13,6 +13,7 @@ from qtpy.QtCore import (
     QSizeF,
     Qt,
     Signal,
+    qVersion,
 )
 from qtpy.QtGui import (
     QBrush,
@@ -46,6 +47,10 @@ _T = TypeVar("_T")
 
 
 SC_BAR = QStyle.SubControl.SC_ScrollBarSubPage
+# whether Qt draws style sheets' sub-page and add-page with each handle (and so over
+# the bar), as it did up to 6.10.0 (https://bugreports.qt.io/browse/QTBUG-141157)
+_QT = tuple(int(n) for n in re.findall(r"\d+", qVersion())[:3])
+_PAGES_WITH_EACH_HANDLE = _QT < (6, 10, 1)
 
 
 class _GenericRangeSlider(_GenericSlider):
@@ -499,6 +504,9 @@ class _GenericRangeSlider(_GenericSlider):
         Up to 6.10.0, Qt draws them with each handle (so over the bar): then only
         the handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
         """
+        if not _PAGES_WITH_EACH_HANDLE:
+            painter.drawComplexControl(CC_SLIDER, opt)
+            return
         image = self._sliderImage(opt)
         rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
         # (with room for shadows and focus rings, which aren't sub-pages)

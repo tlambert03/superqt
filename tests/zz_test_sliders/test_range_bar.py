@@ -10,7 +10,6 @@ from qtpy.QtGui import QBrush, QColor, QGradient, QImage
 from qtpy.QtWidgets import QSlider, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
-from superqt.sliders._generic_range_slider import _PAGES_WITH_EACH_HANDLE
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -71,7 +70,6 @@ def test_bar_with_style_sheet(qtbot: QtBot) -> None:
     assert _bar_visible(slider)
 
 
-@pytest.mark.skipif(_PAGES_WITH_EACH_HANDLE, reason="sub-pages are hidden (Qt<6.10.1)")
 def test_bar_from_style_sheet_sub_page(qtbot: QtBot) -> None:
     slider = QRangeSlider(H)
     qtbot.addWidget(slider)

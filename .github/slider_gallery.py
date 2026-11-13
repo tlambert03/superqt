@@ -49,7 +49,7 @@ QSlider::handle:horizontal {
     border-radius: 7px;
 }
 """
-# (the bar, with Qt >= 6.10.1: before, superqt ignored sub-pages and add-pages)
+# (the bar: before, superqt ignored sub-pages and add-pages)
 PAGES = (
     QSS
     + """

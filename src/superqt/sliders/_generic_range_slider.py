@@ -13,7 +13,6 @@ from qtpy.QtCore import (
     QSizeF,
     Qt,
     Signal,
-    qVersion,
 )
 from qtpy.QtGui import (
     QBrush,
@@ -47,10 +46,6 @@ _T = TypeVar("_T")
 
 
 SC_BAR = QStyle.SubControl.SC_ScrollBarSubPage
-# whether Qt draws style sheets' sub-page and add-page with each handle (and so over
-# the bar), as it did up to 6.10.0 (https://bugreports.qt.io/browse/QTBUG-141157)
-_QT = tuple(int(n) for n in re.findall(r"\d+", qVersion())[:3])
-_PAGES_WITH_EACH_HANDLE = _QT < (6, 10, 1)
 
 
 class _GenericRangeSlider(_GenericSlider):
@@ -213,17 +208,7 @@ class _GenericRangeSlider(_GenericSlider):
         """Override to patch style options before painting."""
         if self._macpatch and not style:
             style = MONTEREY_SLIDER_STYLES_FIX
-
-        if not _PAGES_WITH_EACH_HANDLE:
-            return style
-        # (sub-pages and add-pages would be drawn over the bar, with each handle)
-        name = type(self).__name__
-        pages = ", ".join(
-            f"{name}::{page}:{orientation}"
-            for page in ("sub-page", "add-page")
-            for orientation in ("horizontal", "vertical")
-        )
-        return f"{style}\n{pages} {{background: none; border: none}}"
+        return style
 
     def mouseMoveEvent(self, ev: QtGui.QMouseEvent) -> None:
         if self._pressedControl == SC_BAR:
@@ -435,7 +420,16 @@ class _GenericRangeSlider(_GenericSlider):
         style: QStyle | None = None,
         handle: bool = False,
     ) -> QImage:
-        """The style's groove, filled up to `position`, as an image of the slider.
+        """The style's groove (and `handle`), filled up to `position`."""
+        option = QStyleOptionSlider(opt)
+        option.subControls = SC_GROOVE | SC_HANDLE if handle else SC_GROOVE
+        option.sliderPosition = position
+        return self._sliderImage(option, style)
+
+    def _sliderImage(
+        self, opt: QStyleOptionSlider, style: QStyle | None = None
+    ) -> QImage:
+        """What the style draws for `opt`, as an image of the whole slider.
 
         (Of the whole slider: the macOS style mirrors inverted sliders around the
         slider's rect, and ignores clipping.)
@@ -444,11 +438,8 @@ class _GenericRangeSlider(_GenericSlider):
         image = QImage(self.size() * ratio, QImage.Format.Format_ARGB32_Premultiplied)
         image.setDevicePixelRatio(ratio)
         image.fill(Qt.GlobalColor.transparent)
-        option = QStyleOptionSlider(opt)
-        option.subControls = SC_GROOVE | SC_HANDLE if handle else SC_GROOVE
-        option.sliderPosition = position
         painter = QPainter(image)
-        (style or self.style()).drawComplexControl(CC_SLIDER, option, painter, self)
+        (style or self.style()).drawComplexControl(CC_SLIDER, opt, painter, self)
         painter.end()
         return image
 
@@ -500,7 +491,21 @@ class _GenericRangeSlider(_GenericSlider):
             else:
                 opt.state = opt.state & ~QStyle.StateFlag.State_Sunken
             opt.activeSubControls = SC_HANDLE if idx == hidx else SC_NONE
-            painter.drawComplexControl(CC_SLIDER, opt)
+            self._drawHandle(painter, opt)
+
+    def _drawHandle(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
+        """Draw a handle, without the style sheet's sub-page and add-page.
+
+        Up to 6.10.0, Qt draws them with each handle (so over the bar): then only
+        the handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
+        """
+        image = self._sliderImage(opt)
+        rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
+        # (with room for shadows and focus rings, which aren't sub-pages)
+        if rect.adjusted(-4, -4, 4, 4).contains(_bounds(image).toAlignedRect()):
+            painter.drawImage(0, 0, image)
+        else:
+            painter.drawImage(rect.topLeft(), _crop(image, rect))
 
     def _updateHoverControl(self, pos):
         old_hover = self._hoverControl, self._hoverIndex

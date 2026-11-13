@@ -59,7 +59,7 @@ jobs:
 
       - name: Compose
         run: >
-          uv run --no-project --isolated --with ${{ matrix.qt }}
+          uv run --no-project --isolated --with ${{ matrix.qt }} --with-editable .
           python .github/slider_gallery.py compose gallery
 
       - uses: actions/upload-artifact@v7

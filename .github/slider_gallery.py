@@ -129,20 +129,23 @@ def _bar_visible(slider: QWidget) -> bool | None:
         )
         return [pick(i) for i in range(n)]
 
-    ends = [round(size * 0.03), round(size * 0.97) - 1]
+    # (away from the ends: some styles fill a bit of the groove at the minimum)
+    ends = [round(size * 0.1), round(size * 0.9)]
     lo, hi = sorted(centers)
     ends = [e for e in ends if not (lo * ratio - 2 <= e <= hi * ratio + 2)]
     return all(line(mid) != line(e) for e in ends) if ends else None
 
 
 def _set_scheme(app: QApplication, scheme: str) -> bool:
+    """Whether to render `scheme`: light always, dark if the platform switches."""
     hints = app.styleHints()
-    if not hasattr(hints, "setColorScheme"):  # (Qt < 6.8)
-        return scheme == "light"
-    target = Qt.ColorScheme.Dark if scheme == "dark" else Qt.ColorScheme.Light
-    hints.setColorScheme(target)
-    QTest.qWait(50)
-    return hints.colorScheme() == target
+    if hasattr(hints, "setColorScheme"):  # (Qt >= 6.8)
+        target = Qt.ColorScheme.Dark if scheme == "dark" else Qt.ColorScheme.Light
+        hints.setColorScheme(target)
+        QTest.qWait(50)
+        if hints.colorScheme() == target:
+            return True
+    return scheme == "light"
 
 
 def render(label: str, out: Path) -> None:

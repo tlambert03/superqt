@@ -1,0 +1,69 @@
+# Renders range sliders in every Qt style, with superqt's main branch and with this
+# one, and uploads the images side by side (and which bars went missing, if any).
+name: Range slider gallery
+
+on:
+  pull_request:
+    paths:
+      - "src/superqt/sliders/**"
+      - ".github/slider_gallery.py"
+      - ".github/workflows/slider_gallery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gallery:
+    name: ${{ matrix.os }} ${{ matrix.qt }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-26
+          - macos-15
+          - macos-14
+          - windows-2025
+          - windows-2022
+          - windows-11-arm
+          - ubuntu-24.04
+          - ubuntu-26.04
+        qt: [pyqt6, pyside6, pyqt5]
+    env:
+      QT_API: ${{ matrix.qt }}
+      MAIN: "superqt @ git+https://github.com/pyapp-kit/superqt@main"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.13"
+
+      - if: runner.os == 'Linux'
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+
+      - name: Render with main
+        run: >
+          uv run --no-project --isolated --with ${{ matrix.qt }} --with "${{ env.MAIN }}"
+          python .github/slider_gallery.py render before gallery
+
+      - name: Render with this branch
+        run: >
+          uv run --no-project --isolated --with ${{ matrix.qt }} --with-editable .
+          python .github/slider_gallery.py render after gallery
+
+      - name: Compose
+        run: >
+          uv run --no-project --isolated --with ${{ matrix.qt }}
+          python .github/slider_gallery.py compose gallery
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gallery-${{ matrix.os }}-${{ matrix.qt }}
+          path: gallery

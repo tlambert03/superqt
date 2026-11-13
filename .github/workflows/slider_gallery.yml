@@ -89,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, windows-2025, ubuntu-24.04]
+        os: [macos-26, macos-15, windows-2025, ubuntu-24.04]
         # (Qt, and the minor versions of the bindings that go with it)
         qt:
           - { v: "6.5.3", from: "6.5", to: "6.6" }

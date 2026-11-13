@@ -2,6 +2,7 @@
 
     python slider_gallery.py render <before|after> <out_dir> <styles|napari>
     python slider_gallery.py compose <out_dir>  # before | after, side by side
+    python slider_gallery.py regress <baseline_dir> <out_dir>  # what changed "after"
 
 `render` saves one image per style and color scheme, and `bars.json`: whether each
 slider's bar is visible (the middle of the bar looks different from both ends of the
@@ -11,6 +12,7 @@ slider).
 from __future__ import annotations
 
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -191,7 +193,17 @@ def _page(name: str, label: str, out: Path, tag: str) -> dict[str, bool | None]:
     pixmap.setDevicePixelRatio(2)
     pixmap.fill(window.palette().window().color())
     window.render(pixmap)
-    pixmap.save(str(out / f"{name.replace(' ', '-')}-{label}.png"))
+    page = name.replace(" ", "-")
+    pixmap.save(str(out / f"{page}-{label}.png"))
+    # each slider on its own, for `regress` (the page's title has superqt's version)
+    rows = out / "rows" / label / page
+    rows.mkdir(parents=True, exist_ok=True)
+    for row_name, slider in variants + verticals:
+        image = QPixmap(slider.size() * 2)
+        image.setDevicePixelRatio(2)
+        image.fill(window.palette().window().color())
+        slider.render(image)
+        image.save(str(rows / f"{row_name.replace(' ', '-').replace(',', '')}.png"))
     missing = [n for n, ok in result.items() if ok is False]
     print(f"{name} {label}: missing bars: {missing or 'none'}")
     window.close()
@@ -286,8 +298,80 @@ def compose(out: Path) -> None:
     print("bars visible before but not after:", lost or "none")
 
 
+def regress(baseline: Path, out: Path) -> int:
+    """Compare the sliders rendered "after" in `out` with those in `baseline`.
+
+    Writes `out/regress/`: `regressions.txt`, and for each slider that changed,
+    an image of it (baseline | new | the pixels that changed, in red). Returns 1 if
+    any slider changed, or is missing from one of them.
+    """
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    old_rows, new_rows = baseline / "rows" / "after", out / "rows" / "after"
+    old = {p.relative_to(old_rows) for p in old_rows.rglob("*.png")}
+    new = {p.relative_to(new_rows) for p in new_rows.rglob("*.png")}
+    dest = out / "regress"
+    dest.mkdir(exist_ok=True)
+    report = [f"missing now: {p}" for p in sorted(old - new)]
+    report += [f"new: {p}" for p in sorted(new - old)]
+    for rel in sorted(old & new):
+        before, after = QImage(str(old_rows / rel)), QImage(str(new_rows / rel))
+        if before == after:
+            continue
+        if before.size() != after.size():
+            report.append(f"changed: {rel} (size {before.size()} -> {after.size()})")
+            continue
+        changed = _changed_pixels(before, after)
+        if not changed:
+            continue  # (no channel changed by more than the tolerance)
+        report.append(f"changed: {rel} ({len(changed)} pixels)")
+        w, h = after.width(), after.height()
+        canvas = QImage(w * 3 + 20, h, QImage.Format.Format_RGB32)
+        canvas.fill(QColor("white"))
+        painter = QPainter(canvas)
+        painter.drawImage(0, 0, before)
+        painter.drawImage(w + 10, 0, after)
+        painter.drawImage(2 * w + 20, 0, after)
+        painter.setPen(QColor("red"))
+        for x, y in changed:
+            painter.drawPoint(2 * w + 20 + x, y)
+        painter.end()
+        canvas.save(str(dest / f"{str(rel).replace('/', '__')}"))
+    (dest / "regressions.txt").write_text("\n".join(report) + "\n")
+    print("\n".join(report) if report else "no changes from the baseline")
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a") as f:
+            f.write("### Changes from the baseline\n\n")
+            f.write("".join(f"- {line}\n" for line in report) or "none\n")
+    return 1 if report else 0
+
+
+def _changed_pixels(a: QImage, b: QImage, tolerance: int = 8) -> list[tuple[int, int]]:
+    """The pixels whose color changed by more than `tolerance` in any channel."""
+    a = a.convertToFormat(QImage.Format.Format_RGBA8888)
+    b = b.convertToFormat(QImage.Format.Format_RGBA8888)
+    data = []
+    for image in (a, b):
+        bits = image.constBits()
+        if hasattr(bits, "setsize"):  # (PyQt)
+            bits.setsize(image.sizeInBytes())
+        data.append(bytes(bits))
+    stride, changed = a.bytesPerLine(), []
+    for y in range(a.height()):
+        row_a = data[0][y * stride : y * stride + a.width() * 4]
+        row_b = data[1][y * stride : y * stride + a.width() * 4]
+        if row_a == row_b:
+            continue
+        for x in range(a.width()):
+            i = x * 4
+            if any(abs(row_a[i + c] - row_b[i + c]) > tolerance for c in range(4)):
+                changed.append((x, y))
+    return changed
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "render":
         render(sys.argv[2], Path(sys.argv[3]), sys.argv[4])
+    elif sys.argv[1] == "regress":
+        sys.exit(regress(Path(sys.argv[2]), Path(sys.argv[3])))
     else:
         compose(Path(sys.argv[2]))

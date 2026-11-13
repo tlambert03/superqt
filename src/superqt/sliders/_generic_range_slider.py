@@ -501,19 +501,26 @@ class _GenericRangeSlider(_GenericSlider):
     def _drawHandle(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
         """Draw a handle, without the style sheet's sub-page and add-page.
 
-        Up to 6.10.0, Qt draws them with each handle (so over the bar): then only
-        the handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
+        Up to 6.10.0, Qt draws them with each handle, over the bar: then only the
+        handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
         """
-        if not _PAGES_WITH_EACH_HANDLE:
-            painter.drawComplexControl(CC_SLIDER, opt)
-            return
-        image = self._sliderImage(opt)
-        rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
-        # (with room for shadows and focus rings, which aren't sub-pages)
-        if rect.adjusted(-4, -4, 4, 4).contains(_bounds(image).toAlignedRect()):
-            painter.drawImage(0, 0, image)
-        else:
-            painter.drawImage(rect.topLeft(), _crop(image, rect))
+        if _PAGES_WITH_EACH_HANDLE:
+            # (off screen, only to see whether the style drew pages: they span half
+            # the groove or more, while a handle, and its shadow, stays near its rect)
+            image = self._sliderImage(opt)
+            rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
+            drawn, size = _bounds(image), QRectF(rect)
+            if opt.orientation == Qt.Orientation.Horizontal:
+                reach = max(size.left() - drawn.left(), drawn.right() - size.right())
+                pages = reach > size.width()
+            else:
+                reach = max(size.top() - drawn.top(), drawn.bottom() - size.bottom())
+                pages = reach > size.height()
+            if pages:  # (style sheet handles, which don't blend with what's behind)
+                painter.drawImage(rect.topLeft(), _crop(image, rect))
+                return
+        # (directly: native handles may blend with what's behind them, e.g. on macOS)
+        painter.drawComplexControl(CC_SLIDER, opt)
 
     def _updateHoverControl(self, pos):
         old_hover = self._hoverControl, self._hoverIndex

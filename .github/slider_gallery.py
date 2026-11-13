@@ -15,8 +15,8 @@ import platform
 import sys
 from pathlib import Path
 
-from qtpy import API_NAME, QT_VERSION
-from qtpy.QtCore import Qt
+from qtpy import API_NAME
+from qtpy.QtCore import Qt, qVersion
 from qtpy.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 from qtpy.QtTest import QTest
 from qtpy.QtWidgets import (
@@ -215,7 +215,7 @@ def render(label: str, out: Path, pages: str) -> None:
     default = default or app.style().objectName()
     out.mkdir(parents=True, exist_ok=True)
     system = f"{platform.system()} {platform.release()} {platform.machine()}"
-    tag = f"{system} | {API_NAME} {QT_VERSION} | superqt {superqt.__version__}"
+    tag = f"{system} | {API_NAME}, Qt {qVersion()} | superqt {superqt.__version__}"
     bars: dict[str, dict[str, bool | None]] = {}
     # (the app deletes its previous style: so each is new, and kept here for PySide)
     styles = []

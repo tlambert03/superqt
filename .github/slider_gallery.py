@@ -229,29 +229,28 @@ def render(label: str, out: Path, pages: str) -> None:
 
 
 def compose(out: Path) -> None:
-    """`<style>-<scheme>-before.png` and `-after.png`, side by side."""
+    """`<page>-before.png` and `<page>-after.png`, side by side."""
     app = QApplication.instance() or QApplication([])  # noqa: F841
     dest = out / "compare"
     dest.mkdir(exist_ok=True)
-    for before in sorted(out.glob("*-before.png")):
-        after = before.with_name(before.name.replace("-before", "-after"))
-        images = [QImage(str(p)) for p in (before, after) if p.exists()]
-        width = sum(i.width() for i in images) + 20 * (len(images) - 1)
-        canvas = QImage(
-            width, max(i.height() for i in images) + 50, QImage.Format.Format_RGB32
-        )
+    for after in sorted(out.glob("*-after.png")):
+        before = after.with_name(after.name.replace("-after", "-before"))
+        image = QImage(str(after))
+        # (main may have crashed before saving its image)
+        old = QImage(str(before)) if before.exists() else QImage()
+        width = image.width() * 2 + 20
+        canvas = QImage(width, image.height() + 50, QImage.Format.Format_RGB32)
         canvas.fill(QColor("white"))
         painter = QPainter(canvas)
         font = QFont()
         font.setPixelSize(28)
         painter.setFont(font)
-        x = 0
-        for name, image in zip(("before", "after"), images, strict=False):
-            painter.drawText(x + 10, 34, name)
-            painter.drawImage(x, 50, image)
-            x += image.width() + 20
+        painter.drawText(10, 34, "before" if before.exists() else "before: crashed")
+        painter.drawImage(0, 50, old)
+        painter.drawText(image.width() + 30, 34, "after")
+        painter.drawImage(image.width() + 20, 50, image)
         painter.end()
-        canvas.save(str(dest / before.name.replace("-before", "")))
+        canvas.save(str(dest / after.name.replace("-after", "")))
     # bars that were visible before, but not after
     try:
         old = {

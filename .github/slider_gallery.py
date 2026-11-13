@@ -1,7 +1,7 @@
 """Render range sliders in every Qt style on this machine, to compare two versions.
 
-    python slider_gallery.py render <label> <out_dir>    # e.g. "before", then "after"
-    python slider_gallery.py compose <out_dir>           # before | after, side by side
+    python slider_gallery.py render <before|after> <out_dir> <styles|napari>
+    python slider_gallery.py compose <out_dir>  # before | after, side by side
 
 `render` saves one image per style and color scheme, and `bars.json`: whether each
 slider's bar is visible (the middle of the bar looks different from both ends of the
@@ -189,11 +189,12 @@ def _page(name: str, label: str, out: Path, tag: str) -> dict[str, bool | None]:
     return result
 
 
-def render(label: str, out: Path) -> None:
-    """Save the sliders in each style and scheme, and `bars-<label>.json`.
+def render(label: str, out: Path, pages: str) -> None:
+    """Save the sliders, and `bars-<label>-<pages>.json`.
 
-    The styles are the platform's (except the classic "Windows" style) and Fusion,
-    and napari's style sheets on the default style.
+    `pages` is "styles": in the platform's styles (except the classic "Windows"
+    style) and Fusion, in each scheme; or "napari": with napari's style sheets, on
+    the default style. (Separately, as main's sliders crash with napari's.)
     """
     # (log errors in paint events, as main's raise with napari's style sheet, instead
     # of aborting: PyQt aborts unless there's an excepthook)
@@ -207,7 +208,7 @@ def render(label: str, out: Path) -> None:
     bars: dict[str, dict[str, bool | None]] = {}
     # (the app deletes its previous style: so each is new, and kept here for PySide)
     styles = []
-    for key in QStyleFactory.keys():
+    for key in QStyleFactory.keys() if pages == "styles" else ():
         if key.lower() == "windows":
             continue
         styles.append(QStyleFactory.create(key))
@@ -219,12 +220,12 @@ def render(label: str, out: Path) -> None:
     # napari's style sheets, which it applies to the app, on the default style
     styles.append(QStyleFactory.create(default))
     app.setStyle(styles[-1])
-    for theme in ("dark", "light"):
+    for theme in ("dark", "light") if pages == "napari" else ():
         _set_scheme(app, theme)
         app.setStyleSheet((HERE / f"napari_{theme}.qss").read_text())
         bars[f"napari {theme}"] = _page(f"napari {theme}", label, out, tag)
         app.setStyleSheet("")
-    (out / f"bars-{label}.json").write_text(json.dumps(bars, indent=2))
+    (out / f"bars-{label}-{pages}.json").write_text(json.dumps(bars, indent=2))
 
 
 def compose(out: Path) -> None:
@@ -253,9 +254,17 @@ def compose(out: Path) -> None:
         canvas.save(str(dest / before.name.replace("-before", "")))
     # bars that were visible before, but not after
     try:
-        old = json.loads((out / "bars-before.json").read_text())
-        new = json.loads((out / "bars-after.json").read_text())
-    except FileNotFoundError:
+        old = {
+            k: v
+            for f in out.glob("bars-before-*.json")
+            for k, v in json.loads(f.read_text()).items()
+        }
+        new = {
+            k: v
+            for f in out.glob("bars-after-*.json")
+            for k, v in json.loads(f.read_text()).items()
+        }
+    except ValueError:
         return
     lost = [
         f"{page}: {name}"
@@ -269,6 +278,6 @@ def compose(out: Path) -> None:
 
 if __name__ == "__main__":
     if sys.argv[1] == "render":
-        render(sys.argv[2], Path(sys.argv[3]))
+        render(sys.argv[2], Path(sys.argv[3]), sys.argv[4])
     else:
         compose(Path(sys.argv[2]))

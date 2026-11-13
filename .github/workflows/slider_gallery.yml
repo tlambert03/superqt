@@ -52,12 +52,24 @@ jobs:
       - name: Render with main
         run: >
           uv run --no-project --isolated --with ${{ matrix.qt }} --with "${{ env.MAIN }}"
-          python .github/slider_gallery.py render before gallery
+          python .github/slider_gallery.py render before gallery styles
+
+      # (main's range sliders with tick marks crash with napari's style sheet)
+      - name: Render with main, with napari's style sheets
+        continue-on-error: true
+        run: >
+          uv run --no-project --isolated --with ${{ matrix.qt }} --with "${{ env.MAIN }}"
+          python .github/slider_gallery.py render before gallery napari
 
       - name: Render with this branch
         run: >
           uv run --no-project --isolated --with ${{ matrix.qt }} --with-editable .
-          python .github/slider_gallery.py render after gallery
+          python .github/slider_gallery.py render after gallery styles
+
+      - name: Render with this branch, with napari's style sheets
+        run: >
+          uv run --no-project --isolated --with ${{ matrix.qt }} --with-editable .
+          python .github/slider_gallery.py render after gallery napari
 
       - name: Compose
         run: >

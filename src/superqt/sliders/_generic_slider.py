@@ -452,7 +452,9 @@ class _GenericSlider(QSlider):
         if opt.tickPosition != QSlider.TickPosition.NoTicks:
             opt.subControls |= SC_TICKMARKS
         painter.drawComplexControl(CC_SLIDER, opt)
+        self._draw_qss_ticks(painter, opt)
 
+    def _draw_qss_ticks(self, painter, opt):
         if (
             opt.tickPosition != QSlider.TickPosition.NoTicks
             and "MONTEREY_SLIDER_STYLES_FIX" in self.styleSheet()

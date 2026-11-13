@@ -38,6 +38,7 @@ from superqt import (
     QRangeSlider,
 )
 
+HERE = Path(__file__).parent
 H, V = Qt.Orientation.Horizontal, Qt.Orientation.Vertical
 QSS = """
 QSlider::groove:horizontal {
@@ -148,60 +149,81 @@ def _set_scheme(app: QApplication, scheme: str) -> bool:
     return scheme == "light"
 
 
+def _page(name: str, label: str, out: Path, tag: str) -> dict[str, bool | None]:
+    """Render the sliders in a window, save it, and return which bars are visible."""
+    window = QWidget()
+    window.setWindowTitle(name)
+    col = QVBoxLayout(window)
+    col.addWidget(QLabel(f"{name} | {label}\n{tag}"))
+    form = QFormLayout()
+    col.addLayout(form)
+    variants = _variants()
+    for row_name, slider in variants:
+        slider.setFixedWidth(300)
+        form.addRow(row_name, slider)
+    row = QHBoxLayout()
+    col.addLayout(row)
+    verticals = _verticals()
+    for row_name, slider in verticals:
+        row.addWidget(QLabel(row_name))
+        row.addWidget(slider)
+    row.addStretch()
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    QTest.qWaitForWindowExposed(window)
+    QTest.qWaitForWindowActive(window, 2000)
+    QTest.qWait(150)
+
+    result = {n: _bar_visible(s) for n, s in variants + verticals}
+    pixmap = QPixmap(window.size() * 2)
+    pixmap.setDevicePixelRatio(2)
+    pixmap.fill(window.palette().window().color())
+    window.render(pixmap)
+    pixmap.save(str(out / f"{name.replace(' ', '-')}-{label}.png"))
+    missing = [n for n, ok in result.items() if ok is False]
+    print(f"{name} {label}: missing bars: {missing or 'none'}")
+    window.close()
+    window.deleteLater()
+    QTest.qWait(50)
+    return result
+
+
 def render(label: str, out: Path) -> None:
-    """Save the sliders in each style and scheme, and `bars-<label>.json`."""
+    """Save the sliders in each style and scheme, and `bars-<label>.json`.
+
+    The styles are the platform's (except the classic "Windows" style) and Fusion,
+    and napari's style sheets on the default style.
+    """
+    # (log errors in paint events, as main's raise with napari's style sheet, instead
+    # of aborting: PyQt aborts unless there's an excepthook)
+    sys.excepthook = lambda *exc: print("error:", exc[1], file=sys.stderr)
     app = QApplication.instance() or QApplication([])
-    default = (
-        app.style().name() if hasattr(app.style(), "name") else app.style().objectName()
-    )
+    default = app.style().name() if hasattr(app.style(), "name") else ""
+    default = default or app.style().objectName()
     out.mkdir(parents=True, exist_ok=True)
     system = f"{platform.system()} {platform.release()} {platform.machine()}"
     tag = f"{system} | {API_NAME} {QT_VERSION} | superqt {superqt.__version__}"
     bars: dict[str, dict[str, bool | None]] = {}
+    # (the app deletes its previous style: so each is new, and kept here for PySide)
+    styles = []
     for key in QStyleFactory.keys():
-        style = QStyleFactory.create(key)  # (kept: PySide may not transfer ownership)
-        app.setStyle(style)
+        if key.lower() == "windows":
+            continue
+        styles.append(QStyleFactory.create(key))
+        app.setStyle(styles[-1])
         for scheme in ("light", "dark"):
-            if not _set_scheme(app, scheme):
-                continue
-            window = QWidget()
-            window.setWindowTitle(f"{key} {scheme}")
-            col = QVBoxLayout(window)
-            kind = "default style" if key.lower() == default.lower() else "style"
-            title = QLabel(f"{key} ({kind}), {scheme} | {label}\n{tag}")
-            col.addWidget(title)
-            form = QFormLayout()
-            col.addLayout(form)
-            variants = _variants()
-            for name, slider in variants:
-                slider.setFixedWidth(300)
-                form.addRow(name, slider)
-            row = QHBoxLayout()
-            col.addLayout(row)
-            verticals = _verticals()
-            for name, slider in verticals:
-                row.addWidget(QLabel(name))
-                row.addWidget(slider)
-            row.addStretch()
-            window.show()
-            window.raise_()
-            window.activateWindow()
-            QTest.qWaitForWindowExposed(window)
-            QTest.qWaitForWindowActive(window, 2000)
-            QTest.qWait(150)
+            if _set_scheme(app, scheme):
+                bars[f"{key} {scheme}"] = _page(f"{key} {scheme}", label, out, tag)
 
-            result = {n: _bar_visible(s) for n, s in variants + verticals}
-            bars[f"{key} {scheme}"] = result
-            pixmap = QPixmap(window.size() * 2)
-            pixmap.setDevicePixelRatio(2)
-            pixmap.fill(window.palette().window().color())
-            window.render(pixmap)
-            pixmap.save(str(out / f"{key}-{scheme}-{label}.png"))
-            missing = [n for n, ok in result.items() if ok is False]
-            print(f"{key} {scheme} {label}: missing bars: {missing or 'none'}")
-            window.close()
-            window.deleteLater()
-            QTest.qWait(50)
+    # napari's style sheets, which it applies to the app, on the default style
+    styles.append(QStyleFactory.create(default))
+    app.setStyle(styles[-1])
+    for theme in ("dark", "light"):
+        _set_scheme(app, theme)
+        app.setStyleSheet((HERE / f"napari_{theme}.qss").read_text())
+        bars[f"napari {theme}"] = _page(f"napari {theme}", label, out, tag)
+        app.setStyleSheet("")
     (out / f"bars-{label}.json").write_text(json.dumps(bars, indent=2))
 
 

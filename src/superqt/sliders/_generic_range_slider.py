@@ -6,7 +6,6 @@ from typing import Any, TypeVar
 from qtpy import QtGui
 from qtpy.QtCore import Property, QPoint, QPointF, QRect, QRectF, QSizeF, Qt, Signal
 from qtpy.QtGui import (
-    QBitmap,
     QBrush,
     QColor,
     QGradient,
@@ -15,9 +14,14 @@ from qtpy.QtGui import (
     QPainter,
     QPalette,
     QRadialGradient,
-    QRegion,
 )
-from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider, QStylePainter
+from qtpy.QtWidgets import (
+    QApplication,
+    QSlider,
+    QStyle,
+    QStyleOptionSlider,
+    QStylePainter,
+)
 
 from ._generic_slider import (
     CC_SLIDER,
@@ -25,6 +29,7 @@ from ._generic_slider import (
     SC_GROOVE,
     SC_HANDLE,
     SC_NONE,
+    SC_TICKMARKS,
     _GenericSlider,
 )
 
@@ -192,17 +197,18 @@ class _GenericRangeSlider(_GenericSlider):
 
     def _patch_style(self, style: str):
         """Override to patch style options before painting."""
-        # sub-page styles render on top of the lower sliders and don't work here.
         if self._macpatch and not style:
             style = MONTEREY_SLIDER_STYLES_FIX
 
-        override = f"""
-            \n{type(self).__name__}::sub-page:horizontal
-                {{background: none; border: none}}
-            \n{type(self).__name__}::add-page:vertical
-                {{background: none; border: none}}
-        """
-        return style + override
+        # sub-pages and add-pages (the groove before and after a handle) don't work
+        # with several handles: Qt 5 even draws them over the bar.
+        name = type(self).__name__
+        pages = ", ".join(
+            f"{name}::{page}:{orientation}"
+            for page in ("sub-page", "add-page")
+            for orientation in ("horizontal", "vertical")
+        )
+        return f"{style}\n{pages} {{background: none; border: none}}"
 
     def mouseMoveEvent(self, ev: QtGui.QMouseEvent) -> None:
         if self._pressedControl == SC_BAR:
@@ -222,7 +228,10 @@ class _GenericRangeSlider(_GenericSlider):
         painter = QStylePainter(self)
         opt = self._styleOption
 
-        self._draw_groove_and_ticks(painter, opt, handle=False)
+        groove = self._drawGroove(painter, opt)
+        if self._should_draw_bar:
+            self._drawBar(painter, opt, groove)
+        self._drawTicks(painter, opt)  # (after the bar, which could cover them)
         self._draw_handle(painter, opt)
 
     # ###############  Implementation Details  #######################
@@ -251,7 +260,7 @@ class _GenericRangeSlider(_GenericSlider):
 
     def _getBarColor(self) -> QBrush:
         opt = self._styleOption
-        return self._barBrush(opt) or _accent(opt.palette)
+        return self._barBrush(opt) or self._fillBrush(opt)
 
     def _setBarColor(self, color: Any) -> None:
         self._style.brush_active = color
@@ -290,12 +299,47 @@ class _GenericRangeSlider(_GenericSlider):
 
     # Painting
 
-    def _drawBar(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
-        """Draw the bar between the outer handles, in the shape of the style's groove.
+    def _drawGroove(self, painter: QStylePainter, opt: QStyleOptionSlider) -> QImage:
+        """Draw the style's groove, without any fill; return it (as drawn by the style).
+
+        Some styles (e.g. Windows 11) fill the groove up to the handle even at the
+        minimum. Drawn with the slider flipped, that bit of fill is at the other end:
+        so the half of the groove with the minimum comes from the flipped one.
+        """
+        groove = self._grooveImage(opt, opt.minimum)
+        flipped = QStyleOptionSlider(opt)
+        flipped.upsideDown = not opt.upsideDown
+        other = self._grooveImage(flipped, opt.minimum)
+
+        half = QRectF(self.rect())
+        start, center = self._startOfGroove(opt), half.center()
+        if opt.orientation == Qt.Orientation.Horizontal:
+            if start.x() < center.x():
+                half.setRight(center.x())
+            else:
+                half.setLeft(center.x())
+        elif start.y() < center.y():
+            half.setBottom(center.y())
+        else:
+            half.setTop(center.y())
+
+        ratio = groove.devicePixelRatio()
+        clean = groove.copy()
+        mix = QPainter(clean)
+        mix.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        mix.drawImage(half, other, QRectF(half.topLeft() * ratio, half.size() * ratio))
+        mix.end()
+        painter.drawImage(0, 0, clean)
+        return groove
+
+    def _drawBar(
+        self, painter: QStylePainter, opt: QStyleOptionSlider, groove: QImage
+    ) -> None:
+        """Draw the bar between the outer handles, in the style's groove (`groove`).
 
         It's the style's own fill of the groove, if it has one (as on macOS, and with
-        Fusion and Windows 11). Otherwise, or with a custom `barColor`, it's a bar in
-        the bar color, as thick as the groove.
+        Fusion and Windows 11), in the `barColor` if there's one. Otherwise, it's a bar
+        as thick as the groove, in the `barColor` or the style's fill color.
         """
         ends = [self._handleRect(i, opt).center() for i in (0, -1)]
         span = QRect(self.rect())  # (the part of the slider between the outer handles)
@@ -310,29 +354,42 @@ class _GenericRangeSlider(_GenericSlider):
 
         # styles fill the groove from its minimum end up to the handle: so fill it up
         # to the outer handle that's farther from that end
-        opt.sliderPosition = opt.minimum
-        start = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self).center()
+        start = self._startOfGroove(opt)
         far = max((0, -1), key=lambda i: (ends[i] - start).manhattanLength())
-        empty = self._grooveImage(opt, span, opt.minimum)
-        filled = self._grooveImage(opt, span, self._optSliderPositions[far])
+        filled = _crop(self._grooveImage(opt, self._optSliderPositions[far]), span)
+        empty = _crop(groove, span)
+        fills = filled != empty
 
         brush = self._barBrush(opt)
-        if brush is None and filled != empty:
+        if fills and brush is None:
             painter.drawImage(span.topLeft(), filled)
             return
-
-        # the style doesn't fill its groove, or the bar has a custom color: a bar as
-        # thick as the groove (wherever the style draws it)
-        mask = empty.createAlphaMask(Qt.ImageConversionFlag.ThresholdAlphaDither)
-        pixels = QRegion(QBitmap.fromImage(mask)).boundingRect()
-        if pixels.isEmpty():  # (the style draws no groove)
+        bounds = _bounds(filled if fills else empty)
+        if bounds.isEmpty():  # (the style draws no groove)
             bar = self._plainBar(opt, span)
-        else:
-            bar, ratio = QRectF(pixels), empty.devicePixelRatio()
-            bar = QRectF(bar.topLeft() / ratio, bar.size() / ratio).translated(
-                QPointF(span.topLeft())
+            painter.fillRect(bar, brush or self._fillBrush(opt))
+        elif fills:  # the style's own fill, in the bar color
+            recolor = QPainter(filled)
+            recolor.setCompositionMode(
+                QPainter.CompositionMode.CompositionMode_SourceIn
             )
-        painter.fillRect(bar, brush or _accent(opt.palette))
+            recolor.fillRect(bounds, brush)
+            recolor.end()
+            painter.drawImage(span.topLeft(), filled)
+        else:  # (a solid bar, even if the groove is hollow)
+            bounds.translate(QPointF(span.topLeft()))
+            painter.fillRect(bounds, brush or self._fillBrush(opt))
+
+    def _drawTicks(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
+        if opt.tickPosition != QSlider.TickPosition.NoTicks:
+            opt.subControls = SC_TICKMARKS
+            painter.drawComplexControl(CC_SLIDER, opt)
+            self._draw_qss_ticks(painter, opt)
+
+    def _startOfGroove(self, opt: QStyleOptionSlider) -> QPoint:
+        """The center of a handle at the minimum."""
+        opt.sliderPosition = opt.minimum
+        return self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self).center()
 
     def _plainBar(self, opt: QStyleOptionSlider, span: QRect) -> QRectF:
         """A 4px bar across `span`, centered on the style's groove."""
@@ -347,12 +404,12 @@ class _GenericRangeSlider(_GenericSlider):
         return bar
 
     def _grooveImage(
-        self, opt: QStyleOptionSlider, rect: QRect, position: int
+        self, opt: QStyleOptionSlider, position: int, style: QStyle | None = None
     ) -> QImage:
-        """The part in `rect` of the style's groove, filled up to `position`.
+        """The style's groove, filled up to `position`, as an image of the slider.
 
-        (It's drawn on an image of the whole slider, then cropped: the macOS style
-        mirrors inverted sliders around the slider's rect, and ignores clipping.)
+        (Of the whole slider: the macOS style mirrors inverted sliders around the
+        slider's rect, and ignores clipping.)
         """
         ratio = self.devicePixelRatioF()
         image = QImage(self.size() * ratio, QImage.Format.Format_ARGB32_Premultiplied)
@@ -362,12 +419,33 @@ class _GenericRangeSlider(_GenericSlider):
         option.subControls = SC_GROOVE
         option.sliderPosition = position
         painter = QPainter(image)
-        self.style().drawComplexControl(CC_SLIDER, option, painter, self)
+        (style or self.style()).drawComplexControl(CC_SLIDER, option, painter, self)
         painter.end()
-        crop = QRectF(QPointF(rect.topLeft()) * ratio, QSizeF(rect.size()) * ratio)
-        cropped = image.copy(crop.toAlignedRect())
-        cropped.setDevicePixelRatio(ratio)
-        return cropped
+        return image
+
+    def _fillBrush(self, opt: QStyleOptionSlider) -> QBrush:
+        """The color that the style fills slider grooves with (else the palette's).
+
+        It's read from a groove that the style draws without tick marks (with them,
+        macOS doesn't fill it), filled up to its maximum. (Not the style sheet's style,
+        which may not fill it: the app's, unless the slider has its own.)
+        """
+        style = self.style()
+        if not self.testAttribute(Qt.WidgetAttribute.WA_SetStyle):
+            style = QApplication.style()
+        option = QStyleOptionSlider(opt)
+        option.tickPosition = QSlider.TickPosition.NoTicks
+        empty = self._grooveImage(option, option.minimum, style)
+        full = self._grooveImage(option, option.maximum, style)
+        ratio = full.devicePixelRatio()
+        center = _bounds(full).center() * ratio
+        x, y = int(center.x()), int(center.y())
+        if full.valid(x, y) and full.pixel(x, y) != empty.pixel(x, y):
+            return QBrush(full.pixelColor(x, y))
+        if opt.palette.currentColorGroup() == QPalette.ColorGroup.Disabled:
+            return opt.palette.brush(QPalette.ColorRole.WindowText)  # (grayed)
+        role = getattr(QPalette.ColorRole, "Accent", QPalette.ColorRole.Highlight)
+        return opt.palette.brush(role)  # (`Accent` is new in Qt 6.6)
 
     def _barBrush(self, opt: QStyleOptionSlider) -> QBrush | None:
         """The custom color of the bar, in the slider's current state (if any)."""
@@ -382,9 +460,6 @@ class _GenericRangeSlider(_GenericSlider):
         return _to_brush(color)
 
     def _draw_handle(self, painter: QStylePainter, opt: QStyleOptionSlider):
-        if self._should_draw_bar:
-            self._drawBar(painter, opt)
-
         opt.subControls = SC_HANDLE
         pidx = self._pressedIndex if self._pressedControl == SC_HANDLE else -1
         hidx = self._hoverIndex if self._hoverControl == SC_HANDLE else -1
@@ -480,16 +555,37 @@ class _BarColors:
     brush_disabled: Any = None
 
 
-def _accent(palette: QPalette) -> QBrush:
-    """The palette's accent color (new in Qt 6.6, else its highlight color).
+def _crop(image: QImage, rect: QRect) -> QImage:
+    """The part of `image` in `rect` (in logical pixels)."""
+    ratio = image.devicePixelRatio()
+    pixels = QRectF(QPointF(rect.topLeft()) * ratio, QSizeF(rect.size()) * ratio)
+    part = image.copy(pixels.toAlignedRect())
+    part.setDevicePixelRatio(ratio)
+    return part
 
-    (Disabled, it's the grayed text color: some styles' accent and highlight don't
-    look disabled.)
+
+def _bounds(image: QImage) -> QRectF:
+    """The bounds of the image's pixels that aren't transparent (in logical pixels).
+
+    (Even faint ones: the macOS groove is a black overlay with an alpha of ~5%.)
     """
-    if palette.currentColorGroup() == QPalette.ColorGroup.Disabled:
-        return palette.brush(QPalette.ColorRole.WindowText)
-    role = getattr(QPalette.ColorRole, "Accent", QPalette.ColorRole.Highlight)
-    return palette.brush(role)
+    alpha = image.convertToFormat(QImage.Format.Format_Alpha8)
+    bits = alpha.constBits()
+    if hasattr(bits, "setsize"):  # (PyQt)
+        bits.setsize(alpha.sizeInBytes())
+    data, stride, width = bytes(bits), alpha.bytesPerLine(), alpha.width()
+    rows, left, right = [], width, -1
+    for y in range(alpha.height()):
+        row = data[y * stride : y * stride + width]
+        if visible := row.lstrip(b"\0"):
+            rows.append(y)
+            left = min(left, width - len(visible))
+            right = max(right, len(row.rstrip(b"\0")) - 1)
+    if not rows:
+        return QRectF()
+    ratio = image.devicePixelRatio()
+    pixels = QRectF(left, rows[0], right - left + 1, rows[-1] - rows[0] + 1)
+    return QRectF(pixels.topLeft() / ratio, pixels.size() / ratio)
 
 
 def _to_brush(color: Any) -> QBrush | None:

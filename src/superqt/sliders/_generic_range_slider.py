@@ -311,10 +311,11 @@ class _GenericRangeSlider(_GenericSlider):
         minimum. Drawn with the slider flipped, that bit of fill is at the other end:
         so the half of the groove with the minimum comes from the flipped one.
         """
-        groove = self._grooveImage(opt, opt.minimum)
+        ratio = _ratio(painter)
+        groove = self._grooveImage(opt, opt.minimum, ratio)
         flipped = QStyleOptionSlider(opt)
         flipped.upsideDown = not opt.upsideDown
-        other = self._grooveImage(flipped, opt.minimum)
+        other = self._grooveImage(flipped, opt.minimum, ratio)
 
         half = QRectF(self.rect())
         start, center = self._startOfGroove(opt), half.center()
@@ -328,7 +329,6 @@ class _GenericRangeSlider(_GenericSlider):
         else:
             half.setTop(center.y())
 
-        ratio = groove.devicePixelRatio()
         clean = groove.copy()
         mix = QPainter(clean)
         mix.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
@@ -365,7 +365,8 @@ class _GenericRangeSlider(_GenericSlider):
         inner = _apart(span, handle, horizontal)
         if inner.isEmpty():  # (the bar is under the handles)
             return
-        filled = _crop(self._grooveImage(opt, opt.maximum, handle=True), inner)
+        filled = self._grooveImage(opt, opt.maximum, _ratio(painter), handle=True)
+        filled = _crop(filled, inner)
         empty = _crop(groove, inner)
         fills = filled != empty
 
@@ -422,6 +423,7 @@ class _GenericRangeSlider(_GenericSlider):
         self,
         opt: QStyleOptionSlider,
         position: int,
+        ratio: float,
         style: QStyle | None = None,
         handle: bool = False,
     ) -> QImage:
@@ -429,17 +431,16 @@ class _GenericRangeSlider(_GenericSlider):
         option = QStyleOptionSlider(opt)
         option.subControls = SC_GROOVE | SC_HANDLE if handle else SC_GROOVE
         option.sliderPosition = position
-        return self._sliderImage(option, style)
+        return self._sliderImage(option, ratio, style)
 
     def _sliderImage(
-        self, opt: QStyleOptionSlider, style: QStyle | None = None
+        self, opt: QStyleOptionSlider, ratio: float, style: QStyle | None = None
     ) -> QImage:
         """What the style draws for `opt`, as an image of the whole slider.
 
         (Of the whole slider: the macOS style mirrors inverted sliders around the
-        slider's rect, and ignores clipping.)
+        slider's rect, and ignores clipping.) `ratio` is the image's pixel ratio.
         """
-        ratio = self.devicePixelRatioF()
         image = QImage(self.size() * ratio, QImage.Format.Format_ARGB32_Premultiplied)
         image.setDevicePixelRatio(ratio)
         image.fill(Qt.GlobalColor.transparent)
@@ -460,9 +461,9 @@ class _GenericRangeSlider(_GenericSlider):
             style = QApplication.style()
         option = QStyleOptionSlider(opt)
         option.tickPosition = QSlider.TickPosition.NoTicks
-        empty = self._grooveImage(option, option.minimum, style)
-        full = self._grooveImage(option, option.maximum, style)
-        ratio = full.devicePixelRatio()
+        ratio = self.devicePixelRatioF()  # (any: it's only for its color)
+        empty = self._grooveImage(option, option.minimum, ratio, style)
+        full = self._grooveImage(option, option.maximum, ratio, style)
         center = _bounds(full).center() * ratio
         x, y = int(center.x()), int(center.y())
         if full.valid(x, y) and full.pixel(x, y) != empty.pixel(x, y):
@@ -507,7 +508,7 @@ class _GenericRangeSlider(_GenericSlider):
         if _PAGES_WITH_EACH_HANDLE:
             # (off screen, only to see whether the style drew pages: they span half
             # the groove or more, while a handle, and its shadow, stays near its rect)
-            image = self._sliderImage(opt)
+            image = self._sliderImage(opt, _ratio(painter))
             rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
             drawn, size = _bounds(image), QRectF(rect)
             if opt.orientation == Qt.Orientation.Horizontal:
@@ -602,6 +603,15 @@ class _BarColors:
     brush_active: Any = None
     brush_inactive: Any = None
     brush_disabled: Any = None
+
+
+def _ratio(painter: QPainter) -> float:
+    """The scale of what the painter paints on (e.g. 2 for a 2x image).
+
+    (Not the widget's ratio: when rendered to an image, it's the screen's.)
+    """
+    transform = painter.deviceTransform()
+    return max(abs(transform.m11()), abs(transform.m22())) or 1.0
 
 
 def _apart(rect: QRect, other: QRect, horizontal: bool) -> QRect:

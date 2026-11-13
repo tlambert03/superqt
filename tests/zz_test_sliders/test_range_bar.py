@@ -33,7 +33,8 @@ def _bar_visible(slider: QRangeSlider) -> bool:
             return [image.pixel(at, y) for y in range(image.height())]
         return [image.pixel(x, at) for x in range(image.width())]
 
-    return all(line(mid) != line(end) for end in (size * 0.03, size * 0.97 - 1))
+    # (away from the ends: some styles fill a bit of the groove at the minimum)
+    return all(line(mid) != line(end) for end in (size * 0.1, size * 0.9))
 
 
 @pytest.mark.parametrize("style", QStyleFactory.keys())

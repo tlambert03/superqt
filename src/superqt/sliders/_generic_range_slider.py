@@ -481,10 +481,14 @@ class _BarColors:
 
 
 def _accent(palette: QPalette) -> QBrush:
-    """The palette's accent color (new in Qt 6.6), or else its highlight color."""
-    role = getattr(QPalette.ColorRole, "Accent", QPalette.ColorRole.Highlight)
+    """The palette's accent color (new in Qt 6.6, else its highlight color).
+
+    (Disabled, it's the grayed text color: some styles' accent and highlight don't
+    look disabled.)
+    """
     if palette.currentColorGroup() == QPalette.ColorGroup.Disabled:
-        role = QPalette.ColorRole.Highlight  # (the accent doesn't look disabled)
+        return palette.brush(QPalette.ColorRole.WindowText)
+    role = getattr(QPalette.ColorRole, "Accent", QPalette.ColorRole.Highlight)
     return palette.brush(role)
 
 

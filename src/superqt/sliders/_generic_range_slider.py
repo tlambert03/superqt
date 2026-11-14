@@ -342,10 +342,11 @@ class _GenericRangeSlider(_GenericSlider):
     ) -> None:
         """Draw the bar between the outer handles, in the style's groove (`groove`).
 
-        It's the style's own fill of the groove, if it has one (as on macOS, with
-        Fusion and Windows 11, or a style sheet's sub-page or add-page), in the
-        `barColor` if there's one. Otherwise, it's a bar as thick as the groove, in the
-        `barColor` or the style's fill color.
+        Without a `barColor`, it's the style's own fill of the groove, if it has one
+        (as on macOS, with Fusion and Windows 11, or a style sheet's sub-page or
+        add-page). Otherwise, it's a solid bar as thick as the groove, in the
+        `barColor` (as is, in any state, like a style sheet's colors) or the style's
+        fill color.
         """
         horizontal = opt.orientation == Qt.Orientation.Horizontal
         ends = [self._handleRect(i, opt).center() for i in (0, -1)]
@@ -377,15 +378,7 @@ class _GenericRangeSlider(_GenericSlider):
         bounds = _bounds(filled if fills else empty)
         if bounds.isEmpty():  # (the style draws no groove)
             painter.fillRect(self._plainBar(opt, span), brush or self._fillBrush(opt))
-        elif fills:  # the style's own fill, in the bar color
-            recolor = QPainter(filled)
-            recolor.setCompositionMode(
-                QPainter.CompositionMode.CompositionMode_SourceIn
-            )
-            recolor.fillRect(bounds, brush)
-            recolor.end()
-            painter.drawImage(inner.topLeft(), filled)
-        else:  # a solid bar, as thick as the groove (even if it's hollow)
+        else:  # (even if the groove is hollow, or its fill translucent)
             bounds.translate(QPointF(inner.topLeft()))
             bar = QRectF(span)
             if horizontal:

@@ -60,10 +60,22 @@ QSlider::sub-page:horizontal:disabled { background: #9a9a9a; }
 QSlider::add-page:horizontal { background: #d8d8d8; border-radius: 3px; }
 """
 )
-NDV_GRADIENT = (
-    "QRangeSlider { qproperty-barColor: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-    "stop:0 #6e5a87, stop:1 #c9a0ff); }"
-)
+# (ndv's, also in pymmcore-widgets: translucent, with a translucent barColor)
+NDV = """
+QSlider::groove:horizontal {
+    height: 15px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(128, 128, 128, 0.25), stop:1 rgba(128, 128, 128, 0.1));
+    border-radius: 3px;
+}
+QSlider::handle:horizontal { width: 38px; background: #999999; border-radius: 3px; }
+QSlider::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(100, 100, 100, 0.25), stop:1 rgba(100, 100, 100, 0.1));
+}
+QRangeSlider { qproperty-barColor: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 rgba(100, 80, 120, 0.2), stop:1 rgba(100, 80, 120, 0.4)) }
+"""
 
 
 def _variants() -> list[tuple[str, QWidget]]:
@@ -103,7 +115,7 @@ def _variants() -> list[tuple[str, QWidget]]:
         ("QSS + barColor", qss_color),
         ("QSS sub-page", rs(H, setStyleSheet=PAGES)),
         ("QSS sub-page, disabled", rs(H, setStyleSheet=PAGES, setEnabled=False)),
-        ("ndv gradient", rs(H, setStyleSheet=NDV_GRADIENT)),
+        ("ndv style sheet", rs(H, setStyleSheet=NDV)),
         ("mac style patch", patched),
         ("labeled", rs(H, cls=QLabeledRangeSlider)),
         ("labeled float", rs(H, values=(0.2, 0.7), cls=QLabeledDoubleRangeSlider)),

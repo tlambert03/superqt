@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QBrush, QColor, QGradient, QImage
-from qtpy.QtWidgets import QSlider, QStyleFactory
+from qtpy.QtWidgets import QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
 
@@ -84,6 +84,57 @@ def test_bar_from_style_sheet_sub_page(qtbot: QtBot) -> None:
     middle = slider.rect().center()
     color = image.pixelColor(round(middle.x() * ratio), round(middle.y() * ratio))
     assert color == QColor("#00ff00")
+
+
+def _bar_center(slider: QRangeSlider) -> QColor:
+    """The color in the middle of the bar, on the groove's center line."""
+    image = slider.grab().toImage()
+    ratio = image.width() / slider.width()
+    centers = [slider._handleRect(i).center() for i in (0, -1)]
+    groove = slider.style().subControlRect(
+        QStyle.ComplexControl.CC_Slider,
+        slider._styleOption,
+        QStyle.SubControl.SC_SliderGroove,
+        slider,
+    )
+    x, y = (centers[0].x() + centers[1].x()) / 2, groove.center().y()
+    if slider.orientation() == V:
+        x, y = groove.center().x(), (centers[0].y() + centers[1].y()) / 2
+    return image.pixelColor(round(x * ratio), round(y * ratio))
+
+
+@pytest.mark.parametrize("style", QStyleFactory.keys())
+@pytest.mark.parametrize("orientation", [H, V])
+@pytest.mark.parametrize("ticks", TICKS)
+def test_bar_color_is_drawn_as_is(
+    qtbot: QtBot, style: str, orientation: Qt.Orientation, ticks: QSlider.TickPosition
+) -> None:
+    slider = QRangeSlider(orientation)
+    qtbot.addWidget(slider)
+    qstyle = QStyleFactory.create(style)  # (the widget doesn't own it)
+    slider.setStyle(qstyle)
+    slider.setTickPosition(ticks)
+    slider.resize(200, 30) if orientation == H else slider.resize(30, 200)
+    slider.setValue((30, 70))
+    slider.barColor = "#ff0000"
+    assert _bar_center(slider) == QColor("#ff0000")
+    slider.barColor = "rgba(0, 0, 255, 255)"
+    assert _bar_center(slider) == QColor("#0000ff")
+
+
+def test_translucent_bar_color(qtbot: QtBot) -> None:
+    # (like ndv's: a translucent groove and sub-page, and a translucent bar color)
+    slider = QRangeSlider(H)
+    qtbot.addWidget(slider)
+    slider.setStyleSheet(
+        "QSlider::groove:horizontal { height: 10px; background: rgba(0, 0, 0, 25); }"
+        "QSlider::sub-page:horizontal { background: rgba(0, 0, 0, 25); }"
+        "QRangeSlider { qproperty-barColor: rgba(255, 0, 0, 128); }"
+    )
+    slider.resize(200, 30)
+    slider.setValue((30, 70))
+    color = _bar_center(slider)
+    assert color.red() - color.green() > 100, color.name()  # (half red, at least)
 
 
 @pytest.mark.parametrize("cls", [QRangeSlider, QLabeledRangeSlider])

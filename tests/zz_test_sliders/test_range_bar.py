@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QRect, Qt
 from qtpy.QtGui import QBrush, QColor, QGradient, QImage
-from qtpy.QtWidgets import QSlider, QStyle, QStyleFactory
+from qtpy.QtWidgets import QProxyStyle, QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
+from superqt.sliders._generic_slider import CC_SLIDER, SC_GROOVE, SC_HANDLE
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -84,6 +85,91 @@ def test_bar_from_style_sheet_sub_page(qtbot: QtBot) -> None:
     middle = slider.rect().center()
     color = image.pixelColor(round(middle.x() * ratio), round(middle.y() * ratio))
     assert color == QColor("#00ff00")
+
+
+PAGES = """
+QSlider::groove:horizontal { height: 6px; background: gray; }
+QSlider::groove:vertical { width: 6px; background: gray; }
+QSlider::handle:horizontal { width: 10px; background: white; }
+QSlider::handle:vertical { height: 10px; background: white; }
+QSlider::sub-page { background: #00ff00; }
+QSlider::add-page { background: #0000ff; }
+"""
+
+
+@pytest.mark.parametrize("orientation", [H, V])
+@pytest.mark.parametrize("inverted", [False, True])
+def test_style_sheet_sub_page_is_the_bar(
+    qtbot: QtBot, orientation: Qt.Orientation, inverted: bool
+) -> None:
+    slider = QRangeSlider(orientation)
+    qtbot.addWidget(slider)
+    slider.setStyleSheet(PAGES)
+    slider.setInvertedAppearance(inverted)
+    slider.resize(200, 30) if orientation == H else slider.resize(30, 200)
+    slider.setValue((30, 70))
+    assert _bar_center(slider) == QColor("#00ff00")
+    assert QColor("#00ff00") not in _before_first_handle(slider)
+
+
+class _FillsFromStart(QProxyStyle):
+    """Fusion, with red over the groove from its start up to the handle.
+
+    From the start of the slider (left, or top), like style sheets' sub-page once Qt
+    draws it with the groove; or, if `follows`, from the minimum, like Windows 11.
+    """
+
+    def __init__(self, follows: bool) -> None:
+        super().__init__("Fusion")
+        self.follows = follows
+
+    def drawComplexControl(self, control, option, painter, widget=None) -> None:
+        super().drawComplexControl(control, option, painter, widget)
+        if control != CC_SLIDER or not option.subControls & SC_GROOVE:
+            return
+        groove = self.subControlRect(control, option, SC_GROOVE, widget)
+        center = self.subControlRect(control, option, SC_HANDLE, widget).center()
+        fill = QRect(groove)
+        backwards = self.follows and option.upsideDown
+        if option.orientation == H:
+            fill.setLeft(center.x()) if backwards else fill.setRight(center.x())
+        else:
+            fill.setTop(center.y()) if backwards else fill.setBottom(center.y())
+        painter.fillRect(fill, QColor("#ff0000"))
+
+
+@pytest.mark.parametrize("follows", [True, False])
+@pytest.mark.parametrize("orientation", [H, V])
+@pytest.mark.parametrize("inverted", [False, True])
+def test_no_fill_before_the_first_handle(
+    qtbot: QtBot, follows: bool, orientation: Qt.Orientation, inverted: bool
+) -> None:
+    slider = QRangeSlider(orientation)
+    qtbot.addWidget(slider)
+    style = _FillsFromStart(follows)  # (the widget doesn't own it)
+    slider.setStyle(style)
+    slider.setInvertedAppearance(inverted)
+    slider.resize(200, 30) if orientation == H else slider.resize(30, 200)
+    slider.setValue((30, 70))
+    assert _bar_center(slider) == QColor("#ff0000")
+    assert QColor("#ff0000") not in _before_first_handle(slider)
+
+
+def _before_first_handle(slider: QRangeSlider) -> list[QColor]:
+    """The colors on the groove's center line, from the start to the first handle."""
+    image = slider.grab().toImage()
+    ratio = image.width() / slider.width()
+    groove = slider.style().subControlRect(
+        CC_SLIDER, slider._styleOption, SC_GROOVE, slider
+    )
+    handles = [slider._handleRect(i) for i in range(len(slider.value()))]
+    if slider.orientation() == H:
+        end = min(r.left() for r in handles)
+        points = [(x, groove.center().y()) for x in range(end)]
+    else:
+        end = min(r.top() for r in handles)
+        points = [(groove.center().x(), y) for y in range(end)]
+    return [image.pixelColor(round(x * ratio), round(y * ratio)) for x, y in points]
 
 
 def _bar_center(slider: QRangeSlider) -> QColor:

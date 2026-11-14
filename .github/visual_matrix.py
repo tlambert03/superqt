@@ -219,6 +219,13 @@ ROWS = [
         sheet=QSS_NDV,
     ),
     Row(API, "applyMacStylePatch() called", reference=None, mac_patch=True),
+    Row(
+        API,
+        "applyMacStylePatch() called, vertical",
+        reference=None,
+        mac_patch=True,
+        orientation=V,
+    ),
 ]
 
 NAPARI_SECTION = "napari's dark theme (its style sheet, set on the main window)"
@@ -422,7 +429,7 @@ def render(out: Path, napari: bool) -> None:
         "qt": qVersion(),
         "api": API_NAME,
         "os": _os(),
-        "default style": default.lower(),
+        "default style": default.lower().replace("macintosh", "macos"),
         "pages with the groove alone": _pages_drawn_with(sc.SC_SliderGroove),
         "pages with a handle alone": _pages_drawn_with(sc.SC_SliderHandle),
         "pages": {},
@@ -435,17 +442,19 @@ def render(out: Path, napari: bool) -> None:
     for key in keys:
         styles.append(QStyleFactory.create(key))
         app.setStyle(styles[-1])
+        name = "macos" if key == "macintosh" else key  # (as Qt 6 calls it)
         for scheme in ("light", "dark"):
             if _set_scheme(app, scheme):
-                page = f"{key}/{scheme}/matrix"
+                page = f"{name}/{scheme}/matrix"
                 meta["pages"][page] = _render_page(ROWS, out / page)
-    if napari:
+    if napari:  # (its style sheet has the colors: whether the platform is dark or not)
         styles.append(QStyleFactory.create(default))
         app.setStyle(styles[-1])
-        if _set_scheme(app, "dark"):
-            sheet = (HERE / "napari_dark.qss").read_text()
-            page = f"{default.lower()}/dark/napari"
-            meta["pages"][page] = _render_page(NAPARI_ROWS, out / page, sheet)
+        _set_scheme(app, "dark")
+        sheet = (HERE / "napari_dark.qss").read_text()
+        meta["pages"]["napari/dark/napari"] = _render_page(
+            NAPARI_ROWS, out / "napari/dark/napari", sheet
+        )
     (out / "meta.json").write_text(json.dumps(meta, indent=2))
     print(json.dumps({k: v for k, v in meta.items() if k != "rows"}, indent=2))
 
@@ -470,6 +479,13 @@ QT_NOTES = {
     "next": "6.12.0 built with qtbase 4d278649f7: style sheets' pages drawn with the "
     "groove (QTBUG-141608), coming in a 6.12 patch release and 6.13",
 }
+OS_NAMES = {"macos": "macOS", "windows": "Windows", "ubuntu": "Linux (Ubuntu)"}
+STYLE_NAMES = {
+    "macos": "the native macOS style",
+    "windows11": "the Windows 11 style (Windows 11's default)",
+    "windowsvista": "the windowsvista style (Windows 10's default, and Qt 5's)",
+    "fusion": "the Fusion style (Linux's default)",
+}
 LABEL_W, GAP, PAD = 300, 16, 8
 
 
@@ -490,7 +506,8 @@ def compose(renders: Path, sheets: Path) -> None:
             style, scheme, kind = page.split("/")
             if kind == "napari":
                 continue
-            title = f"{os_name}, {style} style, {scheme}"
+            title = f"{OS_NAMES.get(os_name.split('-')[0], os_name)}, "
+            title += f"{STYLE_NAMES.get(style, style + ' style')}, {scheme} mode"
             _sheet(
                 title,
                 page,

@@ -344,9 +344,9 @@ class _GenericRangeSlider(_GenericSlider):
 
         Without a `barColor`, it's the style's own fill of the groove, if it has one
         (as on macOS, with Fusion and Windows 11, or a style sheet's sub-page or
-        add-page). Otherwise, it's a solid bar as thick as the groove, in the
-        `barColor` (as is, in any state, like a style sheet's colors) or the style's
-        fill color.
+        add-page). Otherwise, it's a solid bar as thick as the groove (and its fill),
+        in the `barColor` (as is, in any state, like a style sheet's colors) or the
+        style's fill color.
         """
         horizontal = opt.orientation == Qt.Orientation.Horizontal
         ends = [self._handleRect(i, opt).center() for i in (0, -1)]
@@ -366,16 +366,17 @@ class _GenericRangeSlider(_GenericSlider):
         inner = _apart(span, handle, horizontal)
         if inner.isEmpty():  # (the bar is under the handles)
             return
-        filled = self._grooveImage(opt, opt.maximum, _ratio(painter), handle=True)
-        filled = _crop(filled, inner)
         empty = _crop(groove, inner)
-        fills = filled != empty
-
-        brush = self._barBrush(opt)
-        if fills and brush is None:
-            painter.drawImage(inner.topLeft(), filled)
-            return
-        bounds = _bounds(filled if fills else empty)
+        if (brush := self._barBrush(opt)) is None:
+            filled = self._grooveImage(opt, opt.maximum, _ratio(painter), handle=True)
+            filled = _crop(filled, inner)
+            if filled != empty:
+                painter.drawImage(inner.topLeft(), filled)
+                return
+            bounds = _bounds(empty)
+        else:  # (filled without the handle, which may reach past its rect)
+            filled = self._grooveImage(opt, opt.maximum, _ratio(painter))
+            bounds = _bounds(_crop(filled, inner))
         if bounds.isEmpty():  # (the style draws no groove)
             painter.fillRect(self._plainBar(opt, span), brush or self._fillBrush(opt))
         else:  # (even if the groove is hollow, or its fill translucent)

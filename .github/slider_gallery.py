@@ -347,7 +347,7 @@ def regress(baseline: Path, out: Path) -> int:
         for x, y in changed:
             painter.drawPoint(2 * w + 20 + x, y)
         painter.end()
-        canvas.save(str(dest / f"{str(rel).replace('/', '__')}"))
+        canvas.save(str(dest / rel.as_posix().replace("/", "__")))
     (dest / "regressions.txt").write_text("\n".join(report) + "\n")
     print("\n".join(report) if report else "no changes from the baseline")
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):

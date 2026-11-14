@@ -12,8 +12,8 @@ permissions:
 
 env:
   # a run of this workflow whose renders are the reference: each job compares the
-  # sliders it renders with this branch to that run's (empty: no comparison)
-  BASELINE_RUN: ""
+  # sliders it renders with this branch to that run's, exactly (empty: no comparison)
+  BASELINE_RUN: "43642932759"  # (6aae633)
 
 jobs:
   gallery:
@@ -91,7 +91,7 @@ jobs:
         if: env.BASELINE_RUN != ''
         run: >
           uv run --no-project --isolated --with ${{ matrix.qt }} --with-editable .
-          python .github/slider_gallery.py regress baseline gallery
+          python .github/slider_gallery.py regress baseline gallery 0
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -174,7 +174,7 @@ jobs:
         if: env.BASELINE_RUN != ''
         run: >
           uv run --no-project --isolated ${{ env.QT }} --with-editable .
-          python .github/slider_gallery.py regress baseline gallery
+          python .github/slider_gallery.py regress baseline gallery 0
 
       - uses: actions/upload-artifact@v7
         if: always()

@@ -307,35 +307,39 @@ class _GenericRangeSlider(_GenericSlider):
     def _drawGroove(self, painter: QStylePainter, opt: QStyleOptionSlider) -> QImage:
         """Draw the style's groove, without any fill; return it.
 
-        Styles fill the groove from its start up to the handle, and some do even
-        with the handle at the start (e.g. Windows 11). Drawn upside down, that bit
-        of fill is at the other end: so the groove under a handle at the start comes
-        from the slider drawn upside down. But style sheets' sub-page is always at
-        the start, and once Qt draws it with the groove, upside down it's all along
-        the groove (https://bugreports.qt.io/browse/QTBUG-141608): then that part of
-        the groove is the mirror image of its other end, in the colors next to it.
+        (As a slider that isn't inverted, like the bar: see `_drawBar`.) Styles fill
+        the groove from the minimum up to the handle, and some do even with the
+        handle at the minimum (e.g. Windows 11). Drawn upside down, that bit of fill
+        is at the other end: so the groove under a handle at the minimum comes from
+        the slider drawn upside down. But some styles fill from the same end either
+        way: Windows 11 up to Qt 6.10.0, and style sheets, whose sub-page is always
+        at the left or top, once Qt draws it with the groove
+        (https://bugreports.qt.io/browse/QTBUG-141608). Then that part of the groove
+        is the mirror image of its other end, in the colors next to it.
         """
         horizontal = opt.orientation == Qt.Orientation.Horizontal
         ratio = _ratio(painter)
-        option = _forward(opt)
+        option = _natural(opt)
         groove = self._grooveImage(option, option.minimum, ratio)
         flipped = QStyleOptionSlider(option)
-        flipped.upsideDown = True
+        flipped.upsideDown = not option.upsideDown
         other = self._grooveImage(flipped, option.minimum, ratio)
 
         option.sliderPosition = option.minimum
         start = self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self)
         option.sliderPosition = option.maximum
         end = self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self)
+        # (from the slider's end with the minimum, at its left or bottom, to the far
+        # side of a handle at the minimum; and the groove between that and the other)
         under, between = QRect(self.rect()), QRect(self.rect())
-        if horizontal:  # (from the slider's start to that handle's end)
+        if horizontal:
             under.setRight(start.right())
             between.setLeft(start.right() + 1)
             between.setRight(end.left() - 1)
         else:
-            under.setBottom(start.bottom())
-            between.setTop(start.bottom() + 1)
-            between.setBottom(end.top() - 1)
+            under.setTop(start.top())
+            between.setTop(end.bottom() + 1)
+            between.setBottom(start.top() - 1)
 
         mix = QPainter(groove)
         mix.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
@@ -346,14 +350,14 @@ class _GenericRangeSlider(_GenericSlider):
             mirror = groove.copy()
             next_to = QRectF(QPointF(between.topLeft()) * ratio, QSizeF(between.size()))
             next_to.setSize(next_to.size() * ratio)
-            if horizontal:
+            if horizontal:  # (its first column, and its last row)
                 mix.translate(self.width(), 0)
                 mix.scale(-1, 1)
                 next_to.setWidth(1)
             else:
                 mix.translate(0, self.height())
                 mix.scale(1, -1)
-                next_to.setHeight(1)
+                next_to.setTop(next_to.bottom() - 1)
             mix.drawImage(0, 0, mirror)
             mix.resetTransform()
             mix.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
@@ -368,10 +372,12 @@ class _GenericRangeSlider(_GenericSlider):
         """Draw the bar between the outer handles, in the style's groove (`groove`).
 
         Without a `barColor`, it's the style's own fill of the groove, if it has one
-        (as on macOS, with Fusion and Windows 11, or a style sheet's sub-page, in any
-        orientation). Otherwise, it's a solid bar as thick as the groove (and its
-        fill), in the `barColor` (as is, in any state, like a style sheet's colors) or
-        the style's fill color.
+        (as on macOS, with Fusion and Windows 11, or a style sheet's sub-page; or its
+        add-page, if vertical): what a slider that isn't inverted fills, from its
+        minimum (at the left, or bottom) up to the handle, whichever way this one
+        goes. Otherwise, it's a solid bar as thick as the groove (and its fill), in
+        the `barColor` (as is, in any state, like a style sheet's colors) or the
+        style's fill color.
         """
         horizontal = opt.orientation == Qt.Orientation.Horizontal
         ends = [self._handleRect(i, opt).center() for i in (0, -1)]
@@ -383,11 +389,10 @@ class _GenericRangeSlider(_GenericSlider):
             span.setTop(min(p.y() for p in ends))
             span.setBottom(max(p.y() for p in ends))
 
-        # The groove, filled all along (styles fill it from the start up to the
-        # handle: style sheets with their sub-page, whichever way the slider goes),
-        # with a handle: up to 6.12.0, style sheets only draw pages with one. That
-        # handle, at the end, isn't part of the bar.
-        option = _forward(opt)
+        # The groove, filled all along (as a slider that isn't inverted), with a
+        # handle: up to 6.12.0, style sheets only draw pages with one. That handle,
+        # at the maximum, isn't part of the bar.
+        option = _natural(opt)
         option.sliderPosition = option.maximum
         handle = self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self)
         inner = _apart(span, handle, horizontal)
@@ -507,8 +512,9 @@ class _GenericRangeSlider(_GenericSlider):
         pidx = self._pressedIndex if self._pressedControl == SC_HANDLE else -1
         hidx = self._hoverIndex if self._hoverControl == SC_HANDLE else -1
         positions = self._optSliderPositions
-        # (the handle nearest the start of the groove: its left, or top)
-        first = (max if opt.upsideDown else min)(
+        # (the handle nearest the end with the minimum, if not inverted: left, bottom)
+        inverted = opt.upsideDown != (opt.orientation == Qt.Orientation.Vertical)
+        first = (max if inverted else min)(
             range(len(positions)), key=positions.__getitem__
         )
         for idx, pos in enumerate(positions):
@@ -529,8 +535,9 @@ class _GenericRangeSlider(_GenericSlider):
         Up to 6.10.0, Qt draws them with each handle, over the bar: then only the
         handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157),
         with the pages that show around a round handle in it on the right sides: the
-        sub-page (the bar) before it, and the add-page after it. So the `first`
-        handle, with the bar after it, is drawn upside down, then mirrored back.
+        bar's on the side with the minimum (as if not inverted: left, or bottom). So
+        the `first` handle, with the bar on its other side, is drawn upside down,
+        then mirrored back.
         """
         if _PAGES_WITH_EACH_HANDLE:
             # (off screen, only to see whether the style drew pages: they span half
@@ -665,10 +672,10 @@ def _ratio(painter: QPainter) -> float:
     return max(abs(transform.m11()), abs(transform.m22())) or 1.0
 
 
-def _forward(opt: QStyleOptionSlider) -> QStyleOptionSlider:
-    """A copy of `opt` with the minimum at the start of the slider (left, or top)."""
+def _natural(opt: QStyleOptionSlider) -> QStyleOptionSlider:
+    """A copy of `opt`, not inverted: with the minimum at the left, or bottom."""
     option = QStyleOptionSlider(opt)
-    option.upsideDown = False
+    option.upsideDown = opt.orientation == Qt.Orientation.Vertical
     return option
 
 

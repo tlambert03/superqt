@@ -1,7 +1,8 @@
 # Renders QSlider and QRangeSlider in the states and stylings that range sliders have
 # gotten wrong, on macOS, Windows and Linux, with Qt 5, Qt 6.10.0, Qt 6.12.0 and the
 # next Qt (6.12.0's QtWidgets built with the change to style sheets coming in a 6.12
-# patch release, qtbase 4d278649f7), and composes contact sheets of them.
+# patch release, qtbase 4d278649f7), and composes contact sheets of them. Then it
+# compares the renders with a baseline run's, and fails if any pixel changed.
 name: Visual matrix
 
 on:
@@ -15,11 +16,14 @@ on:
 
 permissions:
   contents: read
+  actions: read  # (to download the baseline's renders)
 
 env:
   QTBASE: v6.12.0  # (the version of the PyQt6-Qt6 that the next QtWidgets goes into)
   # "QStyleSheetStyle: draw SliderAdd/SubPage even without SC_SliderHandle" (6.12 branch)
   CHANGE: 4d278649f7aafbac402aa40374dc83cf774f39d0
+  # a run of this workflow whose renders are the reference (empty: no comparison)
+  BASELINE_RUN: "43641960131"  # (5057097)
 
 jobs:
   next-qt:
@@ -205,3 +209,29 @@ jobs:
         with:
           name: visual-matrix
           path: sheets
+
+      - name: Download the baseline
+        if: env.BASELINE_RUN != ''
+        uses: actions/download-artifact@v8
+        with:
+          pattern: renders-*
+          path: baseline
+          merge-multiple: true
+          run-id: ${{ env.BASELINE_RUN }}
+          github-token: ${{ github.token }}
+
+      - name: Compare with the baseline
+        if: env.BASELINE_RUN != ''
+        env:
+          QT_API: pyqt6
+          QT_QPA_PLATFORM: offscreen
+        run: >
+          uv run --no-project --isolated --with pyqt6 --with-editable .
+          python .github/visual_matrix.py compare baseline renders changes
+
+      - uses: actions/upload-artifact@v7
+        if: always() && env.BASELINE_RUN != ''
+        with:
+          name: changes
+          path: changes
+          if-no-files-found: ignore

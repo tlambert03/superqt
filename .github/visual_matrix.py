@@ -6,15 +6,19 @@ the range sliders (the same); and one for napari's style sheet.
 
     python visual_matrix.py render <out_dir> [--napari]
     python visual_matrix.py compose <renders_dir> <sheets_dir>
+    python visual_matrix.py compare <baseline_dir> <renders_dir> <changes_dir>
 
 `render` saves, in `out_dir`, `meta.json` (the Qt version, the OS, the styles, which
 pages were rendered, and the rows) and an image of each slider:
-`<style>/<scheme>/<page>/<row>-qslider.png` and `<row>-range.png`.
+`<style>/<scheme>/<page>/<row>-qslider.png` and `<row>-range.png`. `compare` lists
+the images that differ at all from a baseline's (the renders of another commit, in the
+same layout), with an image of each in `changes_dir`, and fails if any does.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import platform
 import sys
 from dataclasses import dataclass, field
@@ -691,11 +695,59 @@ def _shade(color: QColor) -> QColor:
     return color.lighter(108) if color.lightness() < 128 else color.darker(104)
 
 
+def compare(baseline: Path, renders: Path, changes: Path) -> int:
+    """List the renders that differ from the baseline's, pixel by pixel; 1 if any.
+
+    For each, `changes` gets an image: the baseline's | this one | the pixels that
+    changed, in red.
+    """
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    changes.mkdir(parents=True, exist_ok=True)
+    old = {p.relative_to(baseline) for p in baseline.rglob("*.png")}
+    new = {p.relative_to(renders) for p in renders.rglob("*.png")}
+    report = [f"missing now: {p}" for p in sorted(old - new)]
+    report += [f"new: {p}" for p in sorted(new - old)]
+    for rel in sorted(old & new):
+        before, after = QImage(str(baseline / rel)), QImage(str(renders / rel))
+        if before == after:
+            continue
+        report.append(f"changed: {rel} ({_row_label(renders, rel)})")
+        w, h = max(before.width(), after.width()), max(before.height(), after.height())
+        image = QImage(w * 3 + 20, h, QImage.Format.Format_ARGB32)
+        image.fill(QColor("white"))
+        painter = QPainter(image)
+        painter.drawImage(0, 0, before)
+        painter.drawImage(w + 10, 0, after)
+        painter.drawImage(2 * w + 20, 0, after)
+        for y in range(h):
+            for x in range(w):
+                inside = before.valid(x, y) and after.valid(x, y)
+                if not inside or before.pixel(x, y) != after.pixel(x, y):
+                    painter.fillRect(2 * w + 20 + x, y, 1, 1, QColor("red"))
+        painter.end()
+        image.save(str(changes / rel.as_posix().replace("/", "__")))
+    (changes / "changes.txt").write_text("".join(f"{line}\n" for line in report))
+    print("\n".join(report) if report else "no changes from the baseline")
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a") as f:
+            f.write("### Changes from the baseline\n\n")
+            f.write("".join(f"- {line}\n" for line in report) or "none\n")
+    return 1 if report else 0
+
+
+def _row_label(renders: Path, rel: Path) -> str:
+    """The label of the row a render (`<style>/<scheme>/<page>/<row>-...`) is of."""
+    meta = json.loads((renders / rel.parents[3] / "meta.json").read_text())
+    return meta["rows"][rel.parent.name][int(rel.name[:2])]["label"]
+
+
 if __name__ == "__main__":
     command, *args = sys.argv[1:]
     if command == "render":
         render(Path(args[0]), napari="--napari" in args)
     elif command == "compose":
         compose(Path(args[0]), Path(args[1]))
+    elif command == "compare":
+        sys.exit(compare(Path(args[0]), Path(args[1]), Path(args[2])))
     else:
         sys.exit(__doc__)

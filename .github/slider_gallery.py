@@ -2,7 +2,7 @@
 
     python slider_gallery.py render <before|after> <out_dir> <styles|napari>
     python slider_gallery.py compose <out_dir>  # before | after, side by side
-    python slider_gallery.py regress <baseline_dir> <out_dir>  # what changed "after"
+    python slider_gallery.py regress <baseline_dir> <out_dir> [tolerance]  # changes
 
 `render` saves one image per style and color scheme, and `bars.json`: whether each
 slider's bar is visible (the middle of the bar looks different from both ends of the
@@ -310,12 +310,13 @@ def compose(out: Path) -> None:
     print("bars visible before but not after:", lost or "none")
 
 
-def regress(baseline: Path, out: Path) -> int:
+def regress(baseline: Path, out: Path, tolerance: int = 8) -> int:
     """Compare the sliders rendered "after" in `out` with those in `baseline`.
 
-    Writes `out/regress/`: `regressions.txt`, and for each slider that changed,
-    an image of it (baseline | new | the pixels that changed, in red). Returns 1 if
-    any slider changed, or is missing from one of them.
+    Writes `out/regress/`: `regressions.txt`, and for each slider that changed (by
+    more than `tolerance` in a channel), an image of it (baseline | new | the pixels
+    that changed, in red). Returns 1 if any slider changed, or is missing from one
+    of them.
     """
     app = QApplication.instance() or QApplication([])  # noqa: F841
     old_rows, new_rows = baseline / "rows" / "after", out / "rows" / "after"
@@ -332,7 +333,7 @@ def regress(baseline: Path, out: Path) -> int:
         if before.size() != after.size():
             report.append(f"changed: {rel} (size {before.size()} -> {after.size()})")
             continue
-        changed = _changed_pixels(before, after)
+        changed = _changed_pixels(before, after, tolerance)
         if not changed:
             continue  # (no channel changed by more than the tolerance)
         report.append(f"changed: {rel} ({len(changed)} pixels)")
@@ -384,6 +385,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "render":
         render(sys.argv[2], Path(sys.argv[3]), sys.argv[4])
     elif sys.argv[1] == "regress":
-        sys.exit(regress(Path(sys.argv[2]), Path(sys.argv[3])))
+        tolerance = int(sys.argv[4]) if len(sys.argv) > 4 else 8
+        sys.exit(regress(Path(sys.argv[2]), Path(sys.argv[3]), tolerance))
     else:
         compose(Path(sys.argv[2]))

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from qtpy.QtCore import QPoint, QRect, Qt
-from qtpy.QtGui import QBrush, QColor, QGradient, QImage, QPalette
+from qtpy.QtGui import QBrush, QColor, QGradient, QImage, QPainter, QPalette
 from qtpy.QtWidgets import QProxyStyle, QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
@@ -162,6 +162,48 @@ def test_no_fill_outside_the_bar(
     assert _bar_center(slider) == QColor("#ff0000")
     assert QColor("#ff0000") not in _before_first_handle(slider)
     assert QColor("#ff0000") not in _after_last_handle(slider)
+
+
+class _Glow(QProxyStyle):
+    """Fusion, with a glow around handles, reaching far past them."""
+
+    def drawComplexControl(self, control, option, painter, widget=None) -> None:
+        super().drawComplexControl(control, option, painter, widget)
+        if control == CC_SLIDER and option.subControls & SC_HANDLE:
+            rect = self.subControlRect(control, option, SC_HANDLE, widget)
+            size = max(rect.width(), rect.height()) * 3 // 2
+            painter.fillRect(rect.adjusted(-size, 0, size, 0), QColor(0, 0, 0, 20))
+
+
+@pytest.mark.skipif(not _PAGES_WITH_EACH_HANDLE, reason="Qt draws no pages with them")
+@pytest.mark.parametrize(
+    "sheet, pages",
+    [
+        (None, (False, False)),  # (the glow, which moves with the handle)
+        (PAGES, (True, True)),
+        (  # (without a groove or handle rule, Qt leaves it all to the base style)
+            "QSlider::groove:horizontal { height: 6px; background: gray; }"
+            "QSlider::sub-page:horizontal { background: #00ff00; }",
+            (True, False),
+        ),
+    ],
+)
+def test_pages_drawn_with_handles(
+    qtbot: QtBot, sheet: str | None, pages: tuple[bool, bool]
+) -> None:
+    slider = QRangeSlider(H)
+    qtbot.addWidget(slider)
+    style = _Glow("Fusion")  # (the widget doesn't own it)
+    slider.setStyle(style)
+    if sheet:
+        slider.setStyleSheet(sheet)
+    slider.resize(200, 30)
+    image = QImage(slider.size(), QImage.Format.Format_ARGB32)
+    painter = QPainter(image)
+    try:
+        assert slider._pagesWithHandles(painter, slider._styleOption) == pages
+    finally:
+        painter.end()
 
 
 def test_round_handles_show_the_bar_and_groove_around_them(qtbot: QtBot) -> None:

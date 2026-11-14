@@ -583,27 +583,36 @@ class _GenericRangeSlider(_GenericSlider):
         """Whether the style draws a page before each handle, and one after it.
 
         (Style sheets' sub-page and add-page, which Qt draws with each handle up to
-        6.10.0: https://bugreports.qt.io/browse/QTBUG-141157.) With a handle in the
-        middle, off screen: a page reaches far past it, while a handle, and its
-        shadow, stays near its rect.
+        6.10.0: https://bugreports.qt.io/browse/QTBUG-141157.) With a handle at two
+        places, off screen: a page runs from an end of the groove to the handle, so
+        it grows or shrinks as the handle moves, while a handle, and its shadow or
+        glow (however far it reaches), moves with it.
         """
         if not _PAGES_WITH_EACH_HANDLE:
             return False, False
+        ratio = _ratio(painter)
+        quarter = (opt.maximum - opt.minimum) // 4
+        one = self._pastHandle(opt, opt.minimum + quarter, ratio)
+        other = self._pastHandle(opt, opt.maximum - quarter, ratio)
+        return abs(one[0] - other[0]) > 1, abs(one[1] - other[1]) > 1
+
+    def _pastHandle(
+        self, opt: QStyleOptionSlider, position: int, ratio: float
+    ) -> tuple[float, float]:
+        """How far what the style draws for a handle at `position` reaches past it.
+
+        (Before it, and after it: at its left and right, or top and bottom.)
+        """
         option = QStyleOptionSlider(opt)
         option.subControls = SC_HANDLE
-        option.sliderPosition = (opt.minimum + opt.maximum) // 2
-        drawn = _bounds(self._sliderImage(option, _ratio(painter)))
+        option.sliderPosition = position
+        drawn = _bounds(self._sliderImage(option, ratio))
         if drawn.isEmpty():
-            return False, False
+            return 0.0, 0.0
         rect = QRectF(self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self))
         if opt.orientation == Qt.Orientation.Horizontal:
-            reach = rect.width() / 2
-            return (
-                rect.left() - drawn.left() > reach,
-                drawn.right() - rect.right() > reach,
-            )
-        reach = rect.height() / 2
-        return rect.top() - drawn.top() > reach, drawn.bottom() - rect.bottom() > reach
+            return rect.left() - drawn.left(), drawn.right() - rect.right()
+        return rect.top() - drawn.top(), drawn.bottom() - rect.bottom()
 
     def _drawHandle(
         self,

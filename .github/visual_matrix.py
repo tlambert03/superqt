@@ -1,8 +1,8 @@
 """Contact sheets of QSlider and QRangeSlider, in states and stylings that matter.
 
 They're the states and stylings that range sliders' bars have gotten wrong: one sheet
-per OS, style and color scheme, with a column per Qt version; and one for napari's
-style sheet.
+per OS, style and color scheme, with the QSliders (a column per Qt version) beside
+the range sliders (the same); and one for napari's style sheet.
 
     python visual_matrix.py render <out_dir> [--napari]
     python visual_matrix.py compose <renders_dir> <sheets_dir>
@@ -113,7 +113,6 @@ class Row:
     sheet: str = ""
     setters: dict = field(default_factory=dict)  # (for both sliders)
     bar_color: str | None = None
-    mac_patch: bool = False
     inactive: bool = False  # (in a window that isn't the active one)
     cls: type = QRangeSlider
     range: tuple = (0, 99)
@@ -122,7 +121,6 @@ class Row:
 NATIVE = "Native style, nothing customized"
 BAR = "A custom bar color (the barColor property)"
 QSS = "Style sheets (QSS) on the slider"
-API = "superqt API"
 ROWS = [
     Row(NATIVE, "default (handles at 20 and 70)"),
     Row(NATIVE, "window not focused (another window is active)", inactive=True),
@@ -218,14 +216,6 @@ ROWS = [
         "(ndv's and pymmcore-widgets' style sheet)",
         sheet=QSS_NDV,
     ),
-    Row(API, "applyMacStylePatch() called", reference=None, mac_patch=True),
-    Row(
-        API,
-        "applyMacStylePatch() called, vertical",
-        reference=None,
-        mac_patch=True,
-        orientation=V,
-    ),
 ]
 
 NAPARI_SECTION = "napari's dark theme (its style sheet, set on the main window)"
@@ -292,8 +282,6 @@ def _sliders(row: Row) -> tuple[QSlider | None, QWidget]:
         reference.setValue(int(row.reference))
     ranged = row.cls(row.orientation)
     ranged.setRange(*row.range)
-    if row.mac_patch:
-        ranged.applyMacStylePatch()
     if row.bar_color is not None:
         ranged.barColor = row.bar_color
     for slider in (reference, ranged):
@@ -486,6 +474,7 @@ STYLE_NAMES = {
     "windowsvista": "the windowsvista style (Windows 10's default, and Qt 5's)",
     "fusion": "the Fusion style (Linux's default)",
 }
+GROUPS = {"qslider": "QSlider (Qt's own)", "range": "range slider (this branch)"}
 LABEL_W, GAP, PAD = 300, 16, 8
 
 
@@ -540,7 +529,7 @@ def _sheet(
     metas: dict[str, dict],
     path: Path,
 ) -> None:
-    """Rows of `page` (the QSlider, then the range slider) with a column per Qt."""
+    """Rows of `page`: the QSliders, a column per Qt, then the range sliders."""
     columns = [qt for qt in QT_ORDER if qt in dirs and page in metas[qt]["pages"]]
     missing = [qt for qt in QT_ORDER if qt not in columns]
     rows = metas[columns[0]]["rows"][kind]
@@ -557,20 +546,38 @@ def _sheet(
         (qt, i, name): load(qt, i, name)
         for qt in columns
         for i in range(len(rows))
-        for name in ("qslider", "range")
+        for name in GROUPS
     }
-    width = {}  # (of each half of each column)
-    for qt in columns:
-        for name in ("qslider", "range"):
-            sizes = [
-                img.deviceIndependentSize().width()
-                for (q, _, n), img in images.items()
-                if q == qt and n == name and img is not None
-            ]
-            width[qt, name] = max(sizes, default=60)
-    col_w = {qt: width[qt, "qslider"] + PAD + width[qt, "range"] for qt in columns}
-    small = QFont()
+    small, bold, big = QFont(), QFont(), QFont()
     small.setPixelSize(11)
+    bold.setPixelSize(13)
+    bold.setBold(True)
+    big.setPixelSize(18)
+    big.setBold(True)
+    heads = {
+        qt: "next Qt" if qt == "next" else f"Qt {metas[qt]['qt']}" for qt in columns
+    }
+    head_w = max(QFontMetrics(bold).horizontalAdvance(h) for h in heads.values())
+    width = {  # (of each column of a group)
+        name: max(
+            [
+                head_w,
+                *(
+                    img.deviceIndependentSize().width()
+                    for (_, _, n), img in images.items()
+                    if n == name and img is not None
+                ),
+            ]
+        )
+        for name in GROUPS
+    }
+    xs, x = {}, LABEL_W + GAP
+    for name in GROUPS:
+        for qt in columns:
+            xs[name, qt] = x
+            x += width[name] + GAP
+        x += GAP  # (between the groups)
+    total_w = x
     label = QRect(0, 0, LABEL_W - 2 * PAD, 1000)
     wrap = Qt.TextFlag.TextWordWrap
     heights = []
@@ -582,10 +589,9 @@ def _sheet(
         ]
         text = QFontMetrics(small).boundingRect(label, wrap, row["label"]).height()
         heights.append(max([*hs, text, 20]) + 2 * PAD)
-    sections = [r["section"] for r in rows]
-    n_sections = len(dict.fromkeys(sections))
-    head = 130
-    total_w = LABEL_W + sum(col_w[qt] + GAP for qt in columns) + GAP
+    n_sections = len(dict.fromkeys(r["section"] for r in rows))
+    legend = 56
+    head = legend + 18 * len(columns) + 56
     total_h = head + sum(heights) + n_sections * 28 + 20
     ratio = max(
         (img.devicePixelRatio() for img in images.values() if img is not None),
@@ -602,43 +608,38 @@ def _sheet(
     p = QPainter(sheet)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-    big, bold = QFont(), QFont()
-    big.setPixelSize(18)
-    big.setBold(True)
-    bold.setPixelSize(13)
-    bold.setBold(True)
-    meta0 = metas[columns[0]]
     p.setPen(ink)
     p.setFont(big)
     p.drawText(QRectF(PAD, PAD, total_w, 24), title)
     p.setFont(small)
     p.setPen(faint)
     absent = f"   (no {', '.join(missing)} here)" if missing else ""
-    p.drawText(QRectF(PAD, 34, total_w, 16), meta0["os"] + absent)
-    x = LABEL_W + GAP
-    xs = {}
-    for qt in columns:
-        meta = metas[qt]
-        xs[qt] = x
+    p.drawText(QRectF(PAD, 34, total_w, 16), metas[columns[0]]["os"] + absent)
+    for n, qt in enumerate(columns):  # (a line on each Qt)
+        y = legend + 18 * n
         p.setPen(ink)
         p.setFont(bold)
-        name = "next Qt" if qt == "next" else f"Qt {meta['qt']}"
-        p.drawText(QRectF(x, 56, col_w[qt], 16), f"{name} ({meta['api']})")
+        p.drawText(QRectF(PAD, y, 200, 16), f"{heads[qt]} ({metas[qt]['api']})")
         p.setPen(faint)
         p.setFont(small)
-        p.drawText(QRectF(x, 74, col_w[qt], 32), wrap, QT_NOTES.get(qt, ""))
-        states = meta["pages"][page]["states"]
+        note = QT_NOTES.get(qt, "")
+        states = metas[qt]["pages"][page]["states"]
         if not all(states.values()):
-            bad = ", ".join(k for k, v in states.items() if not v)
             p.setPen(QColor("#d33"))
-            p.drawText(QRectF(x, 104, col_w[qt], 14), f"not as intended: {bad}")
+            note += "   NOT AS INTENDED: " + ", ".join(
+                k for k, v in states.items() if not v
+            )
+        p.drawText(QRectF(PAD + 200, y + 1, total_w, 16), note)
+    top = legend + 18 * len(columns) + 12
+    for name, group in GROUPS.items():
+        left = xs[name, columns[0]]
+        p.setPen(ink)
+        p.setFont(bold)
+        p.drawText(QRectF(left, top, total_w, 18), group)
+        for qt in columns:
             p.setPen(faint)
-        p.drawText(QRectF(x, 116, width[qt, "qslider"], 14), "QSlider")
-        p.drawText(
-            QRectF(x + width[qt, "qslider"] + PAD, 116, width[qt, "range"], 14),
-            "range slider (this branch)",
-        )
-        x += col_w[qt] + GAP
+            p.setFont(small)
+            p.drawText(QRectF(xs[name, qt], top + 22, width[name], 16), heads[qt])
     y, section = head, None
     for i, row in enumerate(rows):
         if row["section"] != section:
@@ -656,23 +657,24 @@ def _sheet(
             Qt.AlignmentFlag.AlignVCenter | wrap,
             row["label"],
         )
-        for qt in columns:
-            left = xs[qt]
-            for name in ("qslider", "range"):
-                image = images[qt, i, name]
-                if image is not None:
-                    size = image.deviceIndependentSize()
-                    top = y + (heights[i] - size.height()) / 2
-                    p.drawImage(QRectF(left, top, size.width(), size.height()), image)
-                elif name == "range" or row["reference"]:
-                    p.setPen(faint)
-                    p.drawText(
-                        QRectF(left, y, 120, heights[i]),
-                        Qt.AlignmentFlag.AlignVCenter,
-                        "(not rendered)",
-                    )
-                left += width[qt, "qslider"] + PAD
+        for (qt, j, name), image in images.items():
+            if j != i:
+                continue
+            left = xs[name, qt]
+            if image is not None:
+                size = image.deviceIndependentSize()
+                y0 = y + (heights[i] - size.height()) / 2
+                p.drawImage(QRectF(left, y0, size.width(), size.height()), image)
+            elif name == "range" or row["reference"]:
+                p.setPen(faint)
+                p.drawText(
+                    QRectF(left, y, width[name], heights[i]),
+                    Qt.AlignmentFlag.AlignVCenter,
+                    "(not rendered)",
+                )
         y += heights[i]
+    for name in list(GROUPS)[1:]:  # (a line between the groups)
+        p.fillRect(QRectF(xs[name, columns[0]] - GAP - 1, top, 2, total_h - top), faint)
     p.end()
     sheet.save(str(path))
     print(path)

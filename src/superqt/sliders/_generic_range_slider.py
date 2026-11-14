@@ -506,7 +506,12 @@ class _GenericRangeSlider(_GenericSlider):
         opt.subControls = SC_HANDLE
         pidx = self._pressedIndex if self._pressedControl == SC_HANDLE else -1
         hidx = self._hoverIndex if self._hoverControl == SC_HANDLE else -1
-        for idx, pos in enumerate(self._optSliderPositions):
+        positions = self._optSliderPositions
+        # (the handle nearest the start of the groove: its left, or top)
+        first = (max if opt.upsideDown else min)(
+            range(len(positions)), key=positions.__getitem__
+        )
+        for idx, pos in enumerate(positions):
             opt.sliderPosition = pos
             # make pressed handles appear sunken
             if idx == pidx:
@@ -514,18 +519,24 @@ class _GenericRangeSlider(_GenericSlider):
             else:
                 opt.state = opt.state & ~QStyle.StateFlag.State_Sunken
             opt.activeSubControls = SC_HANDLE if idx == hidx else SC_NONE
-            self._drawHandle(painter, opt)
+            self._drawHandle(painter, opt, first=idx == first)
 
-    def _drawHandle(self, painter: QStylePainter, opt: QStyleOptionSlider) -> None:
+    def _drawHandle(
+        self, painter: QStylePainter, opt: QStyleOptionSlider, first: bool = False
+    ) -> None:
         """Draw a handle, without the style sheet's sub-page and add-page.
 
         Up to 6.10.0, Qt draws them with each handle, over the bar: then only the
-        handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
+        handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157),
+        with the pages that show around a round handle in it on the right sides: the
+        sub-page (the bar) before it, and the add-page after it. So the `first`
+        handle, with the bar after it, is drawn upside down, then mirrored back.
         """
         if _PAGES_WITH_EACH_HANDLE:
             # (off screen, only to see whether the style drew pages: they span half
             # the groove or more, while a handle, and its shadow, stays near its rect)
-            image = self._sliderImage(opt, _ratio(painter))
+            ratio = _ratio(painter)
+            image = self._sliderImage(opt, ratio)
             rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
             drawn, size = _bounds(image), QRectF(rect)
             if opt.orientation == Qt.Orientation.Horizontal:
@@ -535,10 +546,33 @@ class _GenericRangeSlider(_GenericSlider):
                 reach = max(size.top() - drawn.top(), drawn.bottom() - size.bottom())
                 pages = reach > size.height()
             if pages:  # (style sheet handles, which don't blend with what's behind)
+                if first:
+                    image = self._mirroredHandle(opt, rect, ratio)
                 painter.drawImage(rect.topLeft(), _crop(image, rect))
                 return
         # (directly: native handles may blend with what's behind them, e.g. on macOS)
         painter.drawComplexControl(CC_SLIDER, opt)
+
+    def _mirroredHandle(
+        self, opt: QStyleOptionSlider, rect: QRect, ratio: float
+    ) -> QImage:
+        """The handle in `rect`, drawn upside down, then mirrored back onto `rect`."""
+        option = QStyleOptionSlider(opt)
+        option.upsideDown = not opt.upsideDown
+        there = self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self)
+        image = QImage(self.size() * ratio, QImage.Format.Format_ARGB32_Premultiplied)
+        image.setDevicePixelRatio(ratio)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        if opt.orientation == Qt.Orientation.Horizontal:
+            painter.translate(rect.x() + there.x() + rect.width(), 0)
+            painter.scale(-1, 1)
+        else:
+            painter.translate(0, rect.y() + there.y() + rect.height())
+            painter.scale(1, -1)
+        self.style().drawComplexControl(CC_SLIDER, option, painter, self)
+        painter.end()
+        return image
 
     def _updateHoverControl(self, pos):
         old_hover = self._hoverControl, self._hoverIndex

@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from qtpy.QtCore import QRect, Qt
+from qtpy.QtCore import QPoint, QRect, Qt
 from qtpy.QtGui import QBrush, QColor, QGradient, QImage
 from qtpy.QtWidgets import QProxyStyle, QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
+from superqt.sliders._generic_range_slider import _PAGES_WITH_EACH_HANDLE
 from superqt.sliders._generic_slider import CC_SLIDER, SC_GROOVE, SC_HANDLE
 
 if TYPE_CHECKING:
@@ -153,6 +154,29 @@ def test_no_fill_before_the_first_handle(
     slider.setValue((30, 70))
     assert _bar_center(slider) == QColor("#ff0000")
     assert QColor("#ff0000") not in _before_first_handle(slider)
+
+
+@pytest.mark.skipif(
+    not _PAGES_WITH_EACH_HANDLE, reason="Qt draws style sheets' pages with the groove"
+)
+def test_round_handle_without_the_bar_before_it(qtbot: QtBot) -> None:
+    # (with Qt <= 6.10.0, which draws style sheets' sub-page with each handle)
+    slider = QRangeSlider(H)
+    qtbot.addWidget(slider)
+    slider.setStyleSheet(
+        "QSlider::groove:horizontal { height: 20px; background: gray;"
+        " border-radius: 10px; }"
+        "QSlider::handle:horizontal { width: 20px; background: white;"
+        " border-radius: 10px; }"
+        "QSlider::sub-page:horizontal { background: #ff0000; }"
+    )
+    slider.resize(200, 30)
+    slider.setValue((30, 70))
+    image = slider.grab().toImage()
+    ratio = image.width() / slider.width()
+    corner = slider._handleRect(0).topLeft() + QPoint(1, 1)  # (outside the circle)
+    color = image.pixelColor(round(corner.x() * ratio), round(corner.y() * ratio))
+    assert color != QColor("#ff0000")
 
 
 def _before_first_handle(slider: QRangeSlider) -> list[QColor]:

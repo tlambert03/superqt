@@ -354,14 +354,19 @@ def _render_page(rows: list[Row], out: Path, window_sheet: str = "") -> dict:
 
 
 def _set_scheme(app: QApplication, scheme: str) -> bool:
-    """Whether the app is now in `scheme` (switching it needs Qt >= 6.8)."""
+    """Whether to render `scheme`: light always, dark if the platform switches to it.
+
+    (Switching needs Qt >= 6.8, and a platform that has a dark scheme: without one,
+    as on Linux without a desktop, the scheme stays unknown, and light.)
+    """
     hints = app.styleHints()
-    if not hasattr(hints, "setColorScheme"):
-        return scheme == "light"
-    target = getattr(Qt.ColorScheme, scheme.title())
-    hints.setColorScheme(target)
-    QTest.qWait(100)
-    return hints.colorScheme() == target
+    if hasattr(hints, "setColorScheme"):
+        target = getattr(Qt.ColorScheme, scheme.title())
+        hints.setColorScheme(target)
+        QTest.qWait(100)
+        if hints.colorScheme() == target:
+            return True
+    return scheme == "light"
 
 
 def _pages_drawn_with(controls: QStyle.SubControl) -> bool:
@@ -406,6 +411,7 @@ def render(out: Path, napari: bool) -> None:
     # (log errors in paint events instead of aborting, as PyQt does without a hook)
     sys.excepthook = lambda *exc: print("error:", exc[1], file=sys.stderr)
     app = QApplication.instance() or QApplication([])
+    out.mkdir(parents=True, exist_ok=True)
     default = _style_name(app.style())
     keys = [default]
     if platform.system() == "Windows":  # (the default style on Windows 10)

@@ -181,6 +181,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      - uses: pyvista/setup-headless-display-action@v5  # (Qt's libraries need EGL)
+        with:
+          qt: true
+
       - uses: actions/download-artifact@v8
         with:
           pattern: renders-*
@@ -188,6 +192,7 @@ jobs:
           merge-multiple: true
 
       - name: Compose
+        shell: bash  # (with pipefail)
         env:
           QT_API: pyqt6
           QT_QPA_PLATFORM: offscreen

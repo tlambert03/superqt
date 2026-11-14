@@ -1,0 +1,202 @@
+# Renders QSlider and QRangeSlider in the states and stylings that range sliders have
+# gotten wrong, on macOS, Windows and Linux, with Qt 5, Qt 6.10.0, Qt 6.12.0 and the
+# next Qt (6.12.0's QtWidgets built with the change to style sheets coming in a 6.12
+# patch release, qtbase 4d278649f7), and composes contact sheets of them.
+name: Visual matrix
+
+on:
+  pull_request:
+    paths:
+      - "src/superqt/sliders/**"
+      - ".github/visual_matrix.py"
+      - ".github/napari_dark.qss"
+      - ".github/workflows/visual_matrix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QTBASE: v6.12.0  # (the version of the PyQt6-Qt6 that the next QtWidgets goes into)
+  # "QStyleSheetStyle: draw SliderAdd/SubPage even without SC_SliderHandle" (6.12 branch)
+  CHANGE: 4d278649f7aafbac402aa40374dc83cf774f39d0
+
+jobs:
+  next-qt:
+    name: build the next Qt (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-2025, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: cache
+        uses: actions/cache@v6
+        with:
+          path: next
+          key: qtwidgets-${{ env.QTBASE }}-${{ env.CHANGE }}-${{ matrix.os }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y libgl-dev libegl-dev
+          libfontconfig1-dev libfreetype-dev libxkbcommon-dev libdbus-1-dev
+          libglib2.0-dev libvulkan-dev
+
+      - name: Get qtbase, with the change
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$QTBASE" https://github.com/qt/qtbase.git ../qtbase
+          # (one enum is spelled differently in 6.12.0)
+          curl -fsSL "https://github.com/qt/qtbase/commit/$CHANGE.patch" \
+            | sed 's/QRenderRule::BoxFlag::Margin/Margin/' | git -C ../qtbase apply
+          mkdir ../build next
+
+      - name: Build QtWidgets (macOS, Linux)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        working-directory: ../build
+        run: |
+          ../qtbase/configure -release -nomake examples -nomake tests
+          cmake --build . --target Widgets
+
+      - name: Build QtWidgets (Windows)
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        working-directory: ../build
+        shell: cmd
+        run: |
+          call ..\qtbase\configure.bat -release -nomake examples -nomake tests || exit /b 1
+          cmake --build . --target Widgets
+
+      - name: Keep the library
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            macOS)
+              cp ../build/lib/QtWidgets.framework/Versions/A/QtWidgets next/QtWidgets
+              # (find its Qt libraries next to it, as PyQt6-Qt6's does)
+              install_name_tool -rpath "$(cd ../build/lib && pwd)" \
+                @loader_path/../../../ next/QtWidgets
+              codesign -f -s - next/QtWidgets ;;
+            Linux) cp "../build/lib/libQt6Widgets.so.${QTBASE#v}" next/libQt6Widgets.so.6 ;;
+            Windows) cp ../build/bin/Qt6Widgets.dll next/Qt6Widgets.dll ;;
+          esac
+          ls -l next
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: next-qtwidgets-${{ matrix.os }}
+          path: next
+
+  render:
+    needs: next-qt
+    if: ${{ !cancelled() }}  # (only the next Qt's jobs need its build)
+    name: ${{ matrix.os }} ${{ matrix.qt.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-2025, ubuntu-24.04]
+        qt:
+          - { name: qt5, api: pyqt5, pip: "pyqt5" }
+          - { name: qt6.10.0, api: pyqt6, pip: "'pyqt6-qt6==6.10.0' 'pyqt6>=6.10,<6.11'" }
+          - { name: qt6.12.0, api: pyqt6, pip: "'pyqt6-qt6==6.12.0' 'pyqt6==6.12.0'" }
+          - { name: next, api: pyqt6, pip: "'pyqt6-qt6==6.12.0' 'pyqt6==6.12.0'" }
+    env:
+      QT_API: ${{ matrix.qt.api }}
+      OUT: renders/${{ matrix.os }}-${{ matrix.qt.name }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.13"
+
+      - if: runner.os == 'Linux'
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+
+      - name: Install
+        run: |
+          uv venv venv
+          uv pip install --python venv --link-mode copy ${{ matrix.qt.pip }} -e .
+          if [[ "$RUNNER_OS" == Windows ]]; then PY=venv/Scripts/python.exe
+          else PY=venv/bin/python; fi
+          echo "PY=$PY" >> "$GITHUB_ENV"
+
+      - if: matrix.qt.name == 'next'
+        uses: actions/download-artifact@v8
+        with:
+          name: next-qtwidgets-${{ matrix.os }}
+          path: next
+
+      - name: Put the next Qt's QtWidgets into PyQt6
+        if: matrix.qt.name == 'next'
+        run: |
+          QT6=$("$PY" -c "import importlib.util as u, pathlib as p; print(p.Path(
+            u.find_spec('PyQt6').submodule_search_locations[0]) / 'Qt6')")
+          case "$RUNNER_OS" in
+            macOS) cp next/QtWidgets "$QT6/lib/QtWidgets.framework/Versions/A/QtWidgets" ;;
+            Linux) cp next/libQt6Widgets.so.6 "$QT6/lib/libQt6Widgets.so.6" ;;
+            Windows) cp next/Qt6Widgets.dll "$QT6/bin/Qt6Widgets.dll" ;;
+          esac
+
+      - name: Render
+        run: >
+          "$PY" .github/visual_matrix.py render "$OUT"
+          ${{ runner.os == 'Linux' && '--napari' || '' }}
+
+      - name: Check that the next Qt draws style sheets' pages with the groove
+        if: matrix.qt.name == 'next'
+        run: >
+          "$PY" -c "import json, sys; meta = json.load(open('$OUT/meta.json'));
+          sys.exit(not meta['pages with the groove alone'])"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: renders-${{ matrix.os }}-${{ matrix.qt.name }}
+          path: renders
+
+  compose:
+    needs: render
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: renders-*
+          path: renders
+          merge-multiple: true
+
+      - name: Compose
+        env:
+          QT_API: pyqt6
+          QT_QPA_PLATFORM: offscreen
+        run: >
+          uv run --no-project --isolated --with pyqt6 --with-editable .
+          python .github/visual_matrix.py compose renders sheets
+          | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-matrix
+          path: sheets

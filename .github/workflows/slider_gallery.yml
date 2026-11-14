@@ -2,12 +2,8 @@
 # one, and uploads the images side by side (and which bars went missing, if any).
 name: Range slider gallery
 
+# (run by hand: .github/workflows/visual_matrix.yml runs on pull requests)
 on:
-  pull_request:
-    paths:
-      - "src/superqt/sliders/**"
-      - ".github/slider_gallery.py"
-      - ".github/workflows/slider_gallery.yml"
   workflow_dispatch:
 
 permissions:

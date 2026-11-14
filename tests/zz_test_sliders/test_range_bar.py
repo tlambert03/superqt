@@ -10,6 +10,7 @@ from qtpy.QtGui import QBrush, QColor, QGradient, QImage, QPalette
 from qtpy.QtWidgets import QProxyStyle, QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
+from superqt.sliders._generic_range_slider import _PAGES_WITH_EACH_HANDLE
 from superqt.sliders._generic_slider import CC_SLIDER, SC_GROOVE, SC_HANDLE
 
 if TYPE_CHECKING:
@@ -102,17 +103,17 @@ QSlider::add-page { background: #0000ff; }
 def test_style_sheet_fill_is_the_bar(
     qtbot: QtBot, orientation: Qt.Orientation, inverted: bool
 ) -> None:
-    # (as a QSlider that isn't inverted fills its groove: with the sub-page, which
-    # is at the left; or the add-page, which is at the bottom)
+    # (the sub-page, before the handle, at the left or top: in either orientation)
     slider = QRangeSlider(orientation)
     qtbot.addWidget(slider)
     slider.setStyleSheet(PAGES)
     slider.setInvertedAppearance(inverted)
     slider.resize(200, 30) if orientation == H else slider.resize(30, 200)
     slider.setValue((30, 70))
-    fill = QColor("#00ff00" if orientation == H else "#0000ff")
+    fill = QColor("#00ff00")
     assert _bar_center(slider) == fill
     assert fill not in _before_first_handle(slider)
+    assert fill not in _after_last_handle(slider)
 
 
 class _FillsFromMinimum(QProxyStyle):
@@ -148,6 +149,9 @@ class _FillsFromMinimum(QProxyStyle):
 def test_no_fill_outside_the_bar(
     qtbot: QtBot, follows: bool, orientation: Qt.Orientation, inverted: bool
 ) -> None:
+    if not follows and orientation == V and not _PAGES_WITH_EACH_HANDLE:
+        # (then it's drawn like a style sheet: the bar is the part before a handle)
+        pytest.skip("only Windows 11 up to Qt 6.10.0 fills from the bottom either way")
     slider = QRangeSlider(orientation)
     qtbot.addWidget(slider)
     style = _FillsFromMinimum(follows)  # (the widget doesn't own it)

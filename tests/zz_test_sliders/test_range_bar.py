@@ -6,11 +6,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 from qtpy.QtCore import QPoint, QRect, Qt
-from qtpy.QtGui import QBrush, QColor, QGradient, QImage
+from qtpy.QtGui import QBrush, QColor, QGradient, QImage, QPalette
 from qtpy.QtWidgets import QProxyStyle, QSlider, QStyle, QStyleFactory
 
 from superqt import QLabeledDoubleRangeSlider, QLabeledRangeSlider, QRangeSlider
-from superqt.sliders._generic_range_slider import _PAGES_WITH_EACH_HANDLE
 from superqt.sliders._generic_slider import CC_SLIDER, SC_GROOVE, SC_HANDLE
 
 if TYPE_CHECKING:
@@ -161,27 +160,49 @@ def test_no_fill_outside_the_bar(
     assert QColor("#ff0000") not in _after_last_handle(slider)
 
 
-@pytest.mark.skipif(
-    not _PAGES_WITH_EACH_HANDLE, reason="Qt draws style sheets' pages with the groove"
-)
-def test_round_handle_without_the_bar_before_it(qtbot: QtBot) -> None:
-    # (with Qt <= 6.10.0, which draws style sheets' sub-page with each handle)
+def test_round_handles_show_the_bar_and_groove_around_them(qtbot: QtBot) -> None:
+    # (up to Qt 6.10.0, Qt draws style sheets' sub-page with each handle, in its rect)
     slider = QRangeSlider(H)
     qtbot.addWidget(slider)
     slider.setStyleSheet(
-        "QSlider::groove:horizontal { height: 20px; background: gray;"
+        "QSlider::groove:horizontal { height: 20px; background: #808080;"
         " border-radius: 10px; }"
         "QSlider::handle:horizontal { width: 20px; background: white;"
         " border-radius: 10px; }"
         "QSlider::sub-page:horizontal { background: #ff0000; }"
+        "QRangeSlider { qproperty-barColor: #0000ff; }"
     )
     slider.resize(200, 30)
     slider.setValue((30, 70))
     image = slider.grab().toImage()
     ratio = image.width() / slider.width()
-    corner = slider._handleRect(0).topLeft() + QPoint(1, 1)  # (outside the circle)
-    color = image.pixelColor(round(corner.x() * ratio), round(corner.y() * ratio))
-    assert color != QColor("#ff0000")
+
+    def color(point: QPoint) -> QColor:
+        return image.pixelColor(round(point.x() * ratio), round(point.y() * ratio))
+
+    # (corners outside the circles)
+    first, last = slider._handleRect(0), slider._handleRect(1)
+    assert color(first.topLeft() + QPoint(1, 1)) == QColor("#808080")
+    assert color(first.topRight() + QPoint(-1, 1)) == QColor("#0000ff")
+    assert color(last.topLeft() + QPoint(1, 1)) == QColor("#0000ff")
+    assert color(last.topRight() + QPoint(-1, 1)) == QColor("#808080")
+
+
+def test_bar_color_in_inactive_windows_on_windows(qtbot: QtBot) -> None:
+    # (Qt's Windows palettes have the accent in the window's color, when inactive)
+    slider = QRangeSlider(H)
+    qtbot.addWidget(slider)
+    style = QStyleFactory.create("Windows")  # (which doesn't fill the groove)
+    slider.setStyle(style)
+    palette = slider.palette()
+    window = palette.color(QPalette.ColorRole.Window)
+    for role in ("Highlight", "Accent"):  # (`Accent` is new in Qt 6.6)
+        if hasattr(QPalette.ColorRole, role):
+            palette.setColor(getattr(QPalette.ColorRole, role), window)
+    slider.setPalette(palette)
+    slider.resize(200, 30)
+    slider.setValue((30, 70))
+    assert _bar_center(slider) != window
 
 
 def _before_first_handle(slider: QRangeSlider) -> list[QColor]:

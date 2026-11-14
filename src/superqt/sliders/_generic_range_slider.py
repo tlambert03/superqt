@@ -474,6 +474,8 @@ class _GenericRangeSlider(_GenericSlider):
     def _fillBrush(self, opt: QStyleOptionSlider) -> QBrush:
         """The color that the style fills slider grooves with (else the palette's).
 
+        (The palette's accent, grayed if disabled or if it's the window's color.)
+
         It's read from a groove that the style draws without tick marks (with them,
         macOS doesn't fill it), filled up to its maximum. (Not the style sheet's style,
         which may not fill it: the app's, unless the slider has its own.)
@@ -490,10 +492,18 @@ class _GenericRangeSlider(_GenericSlider):
         x, y = int(center.x()), int(center.y())
         if full.valid(x, y) and full.pixel(x, y) != empty.pixel(x, y):
             return QBrush(full.pixelColor(x, y))
-        if opt.palette.currentColorGroup() == QPalette.ColorGroup.Disabled:
-            return opt.palette.brush(QPalette.ColorRole.WindowText)  # (grayed)
+        palette = opt.palette
+        grayed = palette.brush(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText
+        )
+        if palette.currentColorGroup() == QPalette.ColorGroup.Disabled:
+            return grayed
         role = getattr(QPalette.ColorRole, "Accent", QPalette.ColorRole.Highlight)
-        return opt.palette.brush(role)  # (`Accent` is new in Qt 6.6)
+        brush = palette.brush(role)  # (`Accent` is new in Qt 6.6)
+        # (Qt's Windows palettes have it in the window's color in inactive windows)
+        if brush.color() == palette.color(QPalette.ColorRole.Window):
+            return grayed
+        return brush
 
     def _barBrush(self, opt: QStyleOptionSlider) -> QBrush | None:
         """The custom color of the bar, in the slider's current state (if any)."""
@@ -517,6 +527,7 @@ class _GenericRangeSlider(_GenericSlider):
         first = (max if inverted else min)(
             range(len(positions)), key=positions.__getitem__
         )
+        pages = self._pagesWithHandles(painter, opt)
         for idx, pos in enumerate(positions):
             opt.sliderPosition = pos
             # make pressed handles appear sunken
@@ -525,38 +536,68 @@ class _GenericRangeSlider(_GenericSlider):
             else:
                 opt.state = opt.state & ~QStyle.StateFlag.State_Sunken
             opt.activeSubControls = SC_HANDLE if idx == hidx else SC_NONE
-            self._drawHandle(painter, opt, first=idx == first)
+            self._drawHandle(painter, opt, pages, first=idx == first)
+
+    def _pagesWithHandles(
+        self, painter: QStylePainter, opt: QStyleOptionSlider
+    ) -> tuple[bool, bool]:
+        """Whether the style draws a page before each handle, and one after it.
+
+        (Style sheets' sub-page and add-page, which Qt draws with each handle up to
+        6.10.0: https://bugreports.qt.io/browse/QTBUG-141157.) With a handle in the
+        middle, off screen: a page reaches far past it, while a handle, and its
+        shadow, stays near its rect.
+        """
+        if not _PAGES_WITH_EACH_HANDLE:
+            return False, False
+        option = QStyleOptionSlider(opt)
+        option.subControls = SC_HANDLE
+        option.sliderPosition = (opt.minimum + opt.maximum) // 2
+        drawn = _bounds(self._sliderImage(option, _ratio(painter)))
+        if drawn.isEmpty():
+            return False, False
+        rect = QRectF(self.style().subControlRect(CC_SLIDER, option, SC_HANDLE, self))
+        if opt.orientation == Qt.Orientation.Horizontal:
+            reach = rect.width() / 2
+            return (
+                rect.left() - drawn.left() > reach,
+                drawn.right() - rect.right() > reach,
+            )
+        reach = rect.height() / 2
+        return rect.top() - drawn.top() > reach, drawn.bottom() - rect.bottom() > reach
 
     def _drawHandle(
-        self, painter: QStylePainter, opt: QStyleOptionSlider, first: bool = False
+        self,
+        painter: QStylePainter,
+        opt: QStyleOptionSlider,
+        pages: tuple[bool, bool] = (False, False),
+        first: bool = False,
     ) -> None:
-        """Draw a handle, without the style sheet's sub-page and add-page.
+        """Draw a handle, without the style sheet's sub-page and add-page (`pages`).
 
         Up to 6.10.0, Qt draws them with each handle, over the bar: then only the
-        handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157),
-        with the pages that show around a round handle in it on the right sides: the
-        bar's on the side with the minimum (as if not inverted: left, or bottom). So
-        the `first` handle, with the bar on its other side, is drawn upside down,
-        then mirrored back.
+        handle's own rect is drawn (https://bugreports.qt.io/browse/QTBUG-141157).
+        The pages show in it around a round handle, in the groove. With a page on one
+        side, only what the handle's mirror image covers too is drawn there. With
+        pages on both sides, they're kept on the right sides: the bar's on the side
+        with the minimum (as if not inverted: left, or bottom). So the `first`
+        handle, with the bar on its other side, is drawn upside down, then mirrored
+        back.
         """
-        if _PAGES_WITH_EACH_HANDLE:
-            # (off screen, only to see whether the style drew pages: they span half
-            # the groove or more, while a handle, and its shadow, stays near its rect)
+        if any(pages):  # (style sheet handles, which don't blend with what's behind)
             ratio = _ratio(painter)
-            image = self._sliderImage(opt, ratio)
             rect = self.style().subControlRect(CC_SLIDER, opt, SC_HANDLE, self)
-            drawn, size = _bounds(image), QRectF(rect)
-            if opt.orientation == Qt.Orientation.Horizontal:
-                reach = max(size.left() - drawn.left(), drawn.right() - size.right())
-                pages = reach > size.width()
+            if all(pages) and first:
+                image = _crop(self._mirroredHandle(opt, rect, ratio), rect)
             else:
-                reach = max(size.top() - drawn.top(), drawn.bottom() - size.bottom())
-                pages = reach > size.height()
-            if pages:  # (style sheet handles, which don't blend with what's behind)
-                if first:
-                    image = self._mirroredHandle(opt, rect, ratio)
-                painter.drawImage(rect.topLeft(), _crop(image, rect))
-                return
+                image = _crop(self._sliderImage(opt, ratio), rect)
+            if not all(pages):
+                groove = self.style().subControlRect(CC_SLIDER, opt, SC_GROOVE, self)
+                horizontal = opt.orientation == Qt.Orientation.Horizontal
+                band = groove.translated(-rect.topLeft())
+                image = _symmetric(image, band, horizontal)
+            painter.drawImage(rect.topLeft(), image)
+            return
         # (directly: native handles may blend with what's behind them, e.g. on macOS)
         painter.drawComplexControl(CC_SLIDER, opt)
 
@@ -702,6 +743,24 @@ def _crop(image: QImage, rect: QRect) -> QImage:
     part = image.copy(pixels.toAlignedRect())
     part.setDevicePixelRatio(ratio)
     return part
+
+
+def _symmetric(image: QImage, rect: QRect, horizontal: bool) -> QImage:
+    """`image`, in `rect`, only where its mirror image (along the slider) is too."""
+    out = QImage(image)
+    painter = QPainter(out)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+    painter.setClipRect(rect)
+    ratio = image.devicePixelRatio()
+    if horizontal:
+        painter.translate(image.width() / ratio, 0)
+        painter.scale(-1, 1)
+    else:
+        painter.translate(0, image.height() / ratio)
+        painter.scale(1, -1)
+    painter.drawImage(0, 0, image)
+    painter.end()
+    return out
 
 
 def _bounds(image: QImage) -> QRectF:

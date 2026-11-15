@@ -23,7 +23,7 @@ env:
   # "QStyleSheetStyle: draw SliderAdd/SubPage even without SC_SliderHandle" (6.12 branch)
   CHANGE: 4d278649f7aafbac402aa40374dc83cf774f39d0
   # a run of this workflow whose renders are the reference (empty: no comparison)
-  BASELINE_RUN: "43642936789"  # (6aae633)
+  BASELINE_RUN: "43731193982"  # (6650102)
 
 jobs:
   next-qt:

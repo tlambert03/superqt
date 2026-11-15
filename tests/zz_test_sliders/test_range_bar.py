@@ -425,7 +425,7 @@ def test_tiny_and_scaled_down(qtbot: QtBot) -> None:
     image = QImage(2, 1, QImage.Format.Format_ARGB32_Premultiplied)
     painter = QPainter(image)
     painter.scale(0.01, 0.01)
-    slider.render(painter)
+    slider.render(painter, QPoint())
     painter.end()
 
 
@@ -481,7 +481,8 @@ def test_translucent_sub_page_as_in_a_slider(qtbot: QtBot) -> None:
     image = single.grab().toImage()
     ratio = image.width() / single.width()
     expected = image.pixelColor(round(middle.x() * ratio), round(middle.y() * ratio))
-    assert _bar_center(double) == expected
+    argb = QColor.NameFormat.HexArgb
+    assert _bar_center(double).name(argb) == expected.name(argb)
 
 
 SUB_PAGE = """

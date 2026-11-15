@@ -844,7 +844,7 @@ def _key(opt: QStyleOptionSlider, ratio: float) -> tuple:
     """
     return (
         ratio,
-        opt.rect,
+        opt.rect.getRect(),  # (values: with PySide, the rect is the option's own)
         opt.state,
         opt.direction,
         opt.palette.cacheKey(),

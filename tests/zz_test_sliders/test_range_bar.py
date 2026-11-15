@@ -429,18 +429,21 @@ def test_tiny_and_scaled_down(qtbot: QtBot) -> None:
     painter.end()
 
 
-def test_bar_color_from_style_sheet_when_disabled(qtbot: QtBot) -> None:
-    # (`qproperty-barColor` can't be for a state: so it's for all, as Qt's colors)
+def test_disabled_bar_from_the_style_sheet(qtbot: QtBot) -> None:
+    # (as a disabled QSlider's sub-page: a `barColor` is for enabled sliders)
     slider = QRangeSlider(H)
     qtbot.addWidget(slider)
     slider.setStyleSheet(
         "QSlider::groove:horizontal { height: 6px; background: gray; }"
+        "QSlider::sub-page:horizontal { background: seagreen; }"
+        "QSlider::sub-page:horizontal:disabled { background: #9a9a9a; }"
         "QRangeSlider { qproperty-barColor: #ff8800; }"
     )
     slider.resize(200, 30)
     slider.setValue((30, 70))
-    slider.setEnabled(False)
     assert _bar_center(slider) == QColor("#ff8800")
+    slider.setEnabled(False)
+    assert _bar_center(slider) == QColor("#9a9a9a")
 
 
 def test_bar_not_thicker_than_the_groove_with_a_background(qtbot: QtBot) -> None:

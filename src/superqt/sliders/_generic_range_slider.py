@@ -609,9 +609,6 @@ class _GenericRangeSlider(_GenericSlider):
         colors = self._style
         if group == QPalette.ColorGroup.Disabled:
             color = colors.brush_disabled
-            # (as a style sheet's colors, which `qproperty-barColor` can't set by state)
-            if color is None and self.testAttribute(Qt.WidgetAttribute.WA_StyleSheet):
-                color = colors.brush_active
         elif group == QPalette.ColorGroup.Inactive:
             color = colors.brush_inactive or colors.brush_active
         else:

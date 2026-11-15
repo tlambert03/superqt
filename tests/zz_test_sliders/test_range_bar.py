@@ -481,8 +481,9 @@ def test_translucent_sub_page_as_in_a_slider(qtbot: QtBot) -> None:
     image = single.grab().toImage()
     ratio = image.width() / single.width()
     expected = image.pixelColor(round(middle.x() * ratio), round(middle.y() * ratio))
-    argb = QColor.NameFormat.HexArgb
-    assert _bar_center(double).name(argb) == expected.name(argb)
+    # (but for rounding, through an image, in older Qt: drawn over it, it's ~35 off)
+    pairs = zip(_bar_center(double).getRgb(), expected.getRgb(), strict=True)
+    assert max(abs(a - b) for a, b in pairs) <= 2
 
 
 SUB_PAGE = """

@@ -13,7 +13,7 @@ permissions:
 env:
   # a run of this workflow whose renders are the reference: each job compares the
   # sliders it renders with this branch to that run's, exactly (empty: no comparison)
-  BASELINE_RUN: "43731188360"  # (6650102)
+  BASELINE_RUN: "43766091026"  # (a324f58)
 
 jobs:
   gallery:
